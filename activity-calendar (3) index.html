@@ -1,0 +1,1095 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Activity Calendar</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-firestore-compat.min.js"></script>
+<style>
+  :root{
+    --paper:#F7F6F2;
+    --panel:#FFFFFF;
+    --ink:#1E2422;
+    --ink-soft:#5B655F;
+    --line:#E1DFD7;
+    --line-strong:#C8C5B8;
+    --ryde:#2F6F9F;
+    --hornsby:#3F8F5F;
+    --chatswood:#8A4FA6;
+    --brookvale:#C9772E;
+    --accent:#1E2422;
+    --today-ring:#1E2422;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family: -apple-system, "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{
+    display:grid;
+    grid-template-columns: 1fr 320px;
+    gap:20px;
+    padding:20px;
+    max-width:1280px;
+    margin:0 auto;
+  }
+  @media (max-width: 860px){
+    .app{grid-template-columns:1fr;}
+  }
+
+  /* Header */
+  .brand{
+    grid-column:1 / -1;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-bottom:4px;
+  }
+  .brand h1{
+    font-size:20px;
+    letter-spacing:0.02em;
+    margin:0;
+    font-weight:700;
+  }
+  .brand .sub{
+    font-size:12px;
+    color:var(--ink-soft);
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+  }
+
+  /* Calendar panel */
+  .cal-panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:16px;
+  }
+  .cal-nav{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:14px;
+  }
+  .cal-nav .month-label{
+    font-size:17px;
+    font-weight:700;
+    letter-spacing:0.01em;
+  }
+  .nav-btns{display:flex; gap:6px; align-items:center; flex:none;}
+  .nav-btns button{
+    border:1px solid var(--line-strong);
+    background:var(--panel);
+    color:var(--ink);
+    width:30px; height:30px;
+    border-radius:7px;
+    cursor:pointer;
+    font-size:14px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .nav-btns button:hover{background:var(--paper);}
+  .today-btn{
+    border:1px solid var(--line-strong);
+    background:var(--panel);
+    padding:0 14px;
+    height:30px;
+    border-radius:7px;
+    cursor:pointer;
+    font-size:12px;
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    white-space:nowrap;
+    flex:none;
+  }
+  .today-btn:hover{background:var(--paper);}
+
+  .weekday-row{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    margin-bottom:6px;
+  }
+  .weekday-row div{
+    text-align:center;
+    font-size:10px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    padding-bottom:4px;
+  }
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    grid-auto-rows:86px;
+    gap:6px;
+  }
+  @media (max-width:600px){
+    .grid{grid-auto-rows:64px;}
+  }
+  .day{
+    position:relative;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:var(--paper);
+    padding:6px 6px 8px;
+    cursor:pointer;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    transition:border-color .12s, background .12s;
+  }
+  .day:hover{border-color:var(--line-strong); background:#F1F0EA;}
+  .day.selected{border-color:var(--ink); background:#FFFFFF; box-shadow:0 0 0 1px var(--ink) inset;}
+  .day.outside{opacity:0.35;}
+  .day.today .daynum{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:20px;height:20px;
+    border-radius:50%;
+    background:var(--today-ring);
+    color:#fff;
+  }
+  .daynum{
+    font-size:12px;
+    font-weight:600;
+    color:var(--ink);
+  }
+  .daycount{
+    font-size:10px;
+    color:var(--ink-soft);
+    font-weight:600;
+  }
+  .loadbar{
+    display:flex;
+    gap:2px;
+    height:6px;
+    margin-top:6px;
+    border-radius:3px;
+    overflow:hidden;
+    background:transparent;
+  }
+  .loadbar span{
+    flex:1;
+    border-radius:2px;
+    min-width:3px;
+  }
+
+  /* Sidebar */
+  .sidebar{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:14px;
+  }
+  .card h2{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--ink-soft);
+    margin:0 0 10px;
+    font-weight:700;
+  }
+  .filters{display:flex; flex-direction:column; gap:8px;}
+  .filter-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:13px;
+    cursor:pointer;
+    user-select:none;
+  }
+  .swatch{
+    width:11px;height:11px;border-radius:3px;flex:none;
+  }
+  .filter-row input{accent-color:var(--ink); width:14px; height:14px; margin:0;}
+  .filter-row.off{opacity:0.4;}
+
+  .day-detail .date-heading{
+    font-size:15px;
+    font-weight:700;
+    margin-bottom:2px;
+  }
+  .day-detail .date-sub{
+    font-size:11px;
+    color:var(--ink-soft);
+    margin-bottom:12px;
+  }
+  .activity-item{
+    border:1px solid var(--line);
+    border-left:4px solid var(--ink);
+    border-radius:6px;
+    padding:8px 10px;
+    margin-bottom:8px;
+    font-size:12.5px;
+    background:var(--paper);
+    position:relative;
+  }
+  .activity-item .a-title{font-weight:700; margin-bottom:2px; padding-right:18px;}
+  .activity-item .a-meta{color:var(--ink-soft); font-size:11px;}
+  .activity-item .a-notes{margin-top:4px; color:var(--ink); font-size:11.5px;}
+  .activity-item .a-del{
+    position:absolute; top:6px; right:8px;
+    border:none; background:none; cursor:pointer;
+    color:var(--ink-soft); font-size:13px; line-height:1;
+    padding:2px;
+  }
+  .activity-item .a-del:hover{color:#B5443B;}
+  .empty-note{
+    font-size:12px;
+    color:var(--ink-soft);
+    padding:10px 0;
+  }
+
+  .add-btn{
+    width:100%;
+    padding:9px 0;
+    border-radius:7px;
+    border:1px solid var(--ink);
+    background:var(--ink);
+    color:#fff;
+    font-size:12.5px;
+    font-weight:700;
+    letter-spacing:0.02em;
+    cursor:pointer;
+    margin-top:6px;
+  }
+  .add-btn:hover{opacity:0.88;}
+
+  /* Modal */
+  .overlay{
+    position:fixed; inset:0;
+    background:rgba(20,22,20,0.35);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:50;
+    padding:16px;
+  }
+  .overlay.show{display:flex;}
+  .modal{
+    background:#fff;
+    border-radius:12px;
+    width:100%;
+    max-width:380px;
+    padding:20px;
+    box-shadow:0 12px 40px rgba(0,0,0,0.2);
+  }
+  .modal h3{margin:0 0 14px; font-size:15px;}
+  .field{margin-bottom:12px;}
+  .field label{
+    display:block;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    color:var(--ink-soft);
+    margin-bottom:4px;
+    font-weight:700;
+  }
+  .field input, .field select, .field textarea{
+    width:100%;
+    padding:8px 9px;
+    border:1px solid var(--line-strong);
+    border-radius:6px;
+    font-size:13px;
+    font-family:inherit;
+    background:var(--paper);
+    color:var(--ink);
+  }
+  .field textarea{resize:vertical; min-height:50px;}
+  .field select{-webkit-appearance:none; appearance:none;}
+  .site-options{display:flex; gap:8px; flex-wrap:wrap;}
+  .site-chip{
+    padding:6px 10px;
+    border-radius:7px;
+    border:1.5px solid var(--line-strong);
+    font-size:12px;
+    cursor:pointer;
+    display:flex; align-items:center; gap:6px;
+    background:var(--paper);
+  }
+  .site-chip.active{border-color:var(--ink); background:#fff; font-weight:700;}
+  .modal-actions{
+    display:flex; gap:8px; margin-top:16px;
+  }
+  .modal-actions button{
+    flex:1;
+    padding:9px 0;
+    border-radius:7px;
+    font-size:12.5px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .btn-cancel{border:1px solid var(--line-strong); background:#fff; color:var(--ink);}
+  .btn-save{border:1px solid var(--ink); background:var(--ink); color:#fff;}
+  .status-msg{
+    font-size:11px;
+    color:var(--ink-soft);
+    text-align:center;
+    margin-top:6px;
+    min-height:14px;
+  }
+
+  /* Search */
+  .search-wrap{
+    position:relative;
+    margin-bottom:14px;
+  }
+  .search-wrap input{
+    width:100%;
+    padding:9px 34px 9px 12px;
+    border:1px solid var(--line-strong);
+    border-radius:8px;
+    font-size:13px;
+    font-family:inherit;
+    background:var(--paper);
+    color:var(--ink);
+  }
+  .search-wrap input:focus{outline:none; border-color:var(--ink);}
+  .search-clear{
+    position:absolute;
+    right:8px; top:50%; transform:translateY(-50%);
+    border:none; background:none; cursor:pointer;
+    color:var(--ink-soft); font-size:15px; line-height:1;
+    display:none;
+  }
+  .search-wrap.has-text .search-clear{display:block;}
+  .search-results{
+    position:absolute;
+    top:calc(100% + 4px);
+    left:0; right:0;
+    background:#fff;
+    border:1px solid var(--line-strong);
+    border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.12);
+    max-height:260px;
+    overflow-y:auto;
+    z-index:20;
+    display:none;
+  }
+  .search-results.show{display:block;}
+  .search-result-item{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 10px;
+    cursor:pointer;
+    font-size:12.5px;
+    border-bottom:1px solid var(--line);
+  }
+  .search-result-item:last-child{border-bottom:none;}
+  .search-result-item:hover{background:var(--paper);}
+  .search-result-item .swatch{flex:none;}
+  .search-result-item .sr-title{font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .search-result-item .sr-date{color:var(--ink-soft); font-size:11px; flex:none;}
+  .search-empty{
+    padding:10px;
+    font-size:12px;
+    color:var(--ink-soft);
+  }
+
+  .activity-item.flash{
+    animation:flashHighlight 1.6s ease-out;
+  }
+  @keyframes flashHighlight{
+    0%{background:#FFF3D6;}
+    100%{background:var(--paper);}
+  }
+
+  .detail-head-row{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:8px;
+    margin-bottom:2px;
+  }
+  .sort-select{
+    font-size:11px;
+    padding:4px 6px;
+    border:1px solid var(--line-strong);
+    border-radius:6px;
+    background:var(--paper);
+    color:var(--ink-soft);
+    font-family:inherit;
+  }
+
+  .export-buttons{display:flex; flex-direction:column; gap:8px;}
+  .export-btn{
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    padding:9px 0;
+    border-radius:7px;
+    border:1px solid var(--line-strong);
+    background:var(--panel);
+    color:var(--ink);
+    font-size:12.5px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .export-btn:hover{background:var(--paper); border-color:var(--ink);}
+
+  #printArea{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    #printArea, #printArea *{visibility:visible;}
+    #printArea{
+      display:block;
+      position:absolute; top:0; left:0; width:100%;
+      padding:20px;
+    }
+    #printArea h1{font-size:16px; margin:0 0 4px;}
+    #printArea .print-sub{font-size:11px; color:#555; margin-bottom:14px;}
+    #printArea table{width:100%; border-collapse:collapse; font-size:11px;}
+    #printArea th, #printArea td{border:1px solid #ccc; padding:5px 7px; text-align:left;}
+    #printArea th{background:#f0f0f0;}
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="brand">
+    <div>
+      <h1>Activity Calendar</h1>
+      <div class="sub">Ryde · Hornsby · Chatswood · Brookvale</div>
+    </div>
+  </div>
+
+  <div class="cal-panel">
+    <div class="cal-nav">
+      <div class="month-label" id="monthLabel">—</div>
+      <div class="nav-btns">
+        <button id="prevBtn" title="Previous month">&#8249;</button>
+        <button class="today-btn" id="todayBtn">Today</button>
+        <button id="nextBtn" title="Next month">&#8250;</button>
+      </div>
+    </div>
+    <div class="search-wrap" id="searchWrap">
+      <input id="searchInput" type="text" placeholder="Search activities by name...">
+      <button class="search-clear" id="searchClear" title="Clear">&times;</button>
+      <div class="search-results" id="searchResults"></div>
+    </div>
+
+    <div class="weekday-row">
+      <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="sidebar">
+    <div class="card">
+      <h2>Export</h2>
+      <div class="export-buttons">
+        <button class="export-btn" id="exportExcelBtn">Export to Excel (.xlsx)</button>
+        <button class="export-btn" id="exportPdfBtn">Export to PDF</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Filter by site</h2>
+      <div class="filters" id="filters"></div>
+    </div>
+
+    <div class="card day-detail" id="dayDetail">
+      <div class="detail-head-row">
+        <div>
+          <div class="date-heading" id="detailHeading">Select a day</div>
+          <div class="date-sub" id="detailSub"></div>
+        </div>
+        <select class="sort-select" id="sortSelect">
+          <option value="time">Sort: Time</option>
+          <option value="site">Sort: Site</option>
+          <option value="alpha">Sort: A–Z</option>
+        </select>
+      </div>
+      <div id="activityList"></div>
+      <button class="add-btn" id="openAddBtn">+ Add activity</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h3 id="modalTitle">Add activity</h3>
+    <div class="field">
+      <label>Title</label>
+      <input id="fTitle" type="text" placeholder="e.g. Work Foundations group session">
+    </div>
+    <div class="field">
+      <label>Site</label>
+      <div class="site-options" id="siteOptions"></div>
+    </div>
+    <div class="field">
+      <label>Date</label>
+      <input id="fDate" type="date">
+    </div>
+    <div class="field">
+      <label>Time (optional)</label>
+      <input id="fTime" type="time">
+    </div>
+    <div class="field">
+      <label>Notes (optional)</label>
+      <textarea id="fNotes" placeholder="Location, host, cohort..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="cancelBtn">Cancel</button>
+      <button class="btn-save" id="saveBtn">Save</button>
+    </div>
+    <div class="status-msg" id="statusMsg"></div>
+  </div>
+</div>
+
+<div id="printArea"></div>
+
+<script>
+(function(){
+  // ============================================================
+  // FIREBASE CONFIG — REPLACE THE VALUES BELOW WITH YOUR OWN.
+  // Get these from: Firebase console > Project settings > Your apps > web app.
+  // Until you replace these, nothing will save.
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "REPLACE_WITH_YOUR_API_KEY",
+    authDomain: "REPLACE_WITH_YOUR_AUTH_DOMAIN",
+    projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
+    storageBucket: "REPLACE_WITH_YOUR_STORAGE_BUCKET",
+    messagingSenderId: "REPLACE_WITH_YOUR_SENDER_ID",
+    appId: "REPLACE_WITH_YOUR_APP_ID"
+  };
+  const CONFIG_IS_PLACEHOLDER = firebaseConfig.apiKey === "REPLACE_WITH_YOUR_API_KEY";
+
+  let db = null;
+  let docRef = null;
+  if(!CONFIG_IS_PLACEHOLDER){
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    docRef = db.collection('wise_calendar').doc('main');
+  }
+
+  const SITES = [
+    {id:'ryde', name:'Ryde', color:'var(--ryde)', hex:'#2F6F9F'},
+    {id:'hornsby', name:'Hornsby', color:'var(--hornsby)', hex:'#3F8F5F'},
+    {id:'chatswood', name:'Chatswood', color:'var(--chatswood)', hex:'#8A4FA6'},
+    {id:'brookvale', name:'Brookvale', color:'var(--brookvale)', hex:'#C9772E'}
+  ];
+
+  let activities = [];
+  let activeFilters = new Set(SITES.map(s=>s.id));
+  let viewDate = new Date();
+  let selectedDateStr = fmtDate(new Date());
+  let editingId = null;
+  let storageOK = true;
+  let sortMode = 'time';
+  let flashId = null;
+
+  function fmtDate(d){
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+  function todayStr(){ return fmtDate(new Date()); }
+  function siteById(id){ return SITES.find(s=>s.id===id); }
+
+  function showConfigWarning(){
+    const grid = document.getElementById('grid');
+    if(grid) grid.insertAdjacentHTML('beforebegin',
+      '<div style="background:#FDEEDC;border:1px solid #E3A857;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#7A4B0A;">'
+      + 'Not connected to shared storage yet — replace the firebaseConfig placeholder values in the code with your real Firebase config. Changes made now will not save.'
+      + '</div>');
+  }
+
+  async function saveActivities(){
+    if(CONFIG_IS_PLACEHOLDER){ storageOK = false; return; }
+    try{
+      await docRef.set({ activities }, { merge:true });
+      storageOK = true;
+    }catch(e){
+      storageOK = false;
+    }
+  }
+
+  function startRealtimeSync(){
+    if(CONFIG_IS_PLACEHOLDER){
+      showConfigWarning();
+      render();
+      return;
+    }
+    docRef.onSnapshot((snap)=>{
+      const data = snap.exists ? snap.data() : {};
+      activities = data.activities || [];
+      render();
+      if(!data.seeded){
+        seedIfNeeded();
+      }
+    }, (err)=>{
+      console.error('Firestore sync error', err);
+    });
+  }
+
+  function buildFilters(){
+    const wrap = document.getElementById('filters');
+    wrap.innerHTML = '';
+    SITES.forEach(s=>{
+      const row = document.createElement('label');
+      row.className = 'filter-row';
+      row.innerHTML = `
+        <input type="checkbox" ${activeFilters.has(s.id)?'checked':''} data-site="${s.id}">
+        <span class="swatch" style="background:${s.hex}"></span>
+        <span>${s.name}</span>
+      `;
+      row.querySelector('input').addEventListener('change', (e)=>{
+        if(e.target.checked) activeFilters.add(s.id);
+        else activeFilters.delete(s.id);
+        row.classList.toggle('off', !e.target.checked);
+        render();
+      });
+      wrap.appendChild(row);
+    });
+  }
+
+  function monthLabel(d){
+    return d.toLocaleDateString('en-AU', {month:'long', year:'numeric'});
+  }
+
+  function buildGrid(){
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    document.getElementById('monthLabel').textContent = monthLabel(viewDate);
+
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const firstOfMonth = new Date(year, month, 1);
+    // Monday-start offset
+    let startOffset = firstOfMonth.getDay() - 1;
+    if(startOffset < 0) startOffset = 6;
+
+    const gridStart = new Date(year, month, 1 - startOffset);
+    const totalCells = 42;
+
+    for(let i=0;i<totalCells;i++){
+      const cellDate = new Date(gridStart);
+      cellDate.setDate(gridStart.getDate() + i);
+      const dStr = fmtDate(cellDate);
+      const isOutside = cellDate.getMonth() !== month;
+      const isToday = dStr === todayStr();
+      const isSelected = dStr === selectedDateStr;
+
+      const dayActs = activities.filter(a => a.date === dStr && activeFilters.has(a.site));
+
+      const cell = document.createElement('div');
+      cell.className = 'day' + (isOutside?' outside':'') + (isToday?' today':'') + (isSelected?' selected':'');
+      cell.dataset.date = dStr;
+
+      const top = document.createElement('div');
+      top.style.display='flex';
+      top.style.justifyContent='space-between';
+      top.style.alignItems='center';
+      const num = document.createElement('span');
+      num.className='daynum';
+      num.textContent = cellDate.getDate();
+      top.appendChild(num);
+      if(dayActs.length){
+        const cnt = document.createElement('span');
+        cnt.className='daycount';
+        cnt.textContent = dayActs.length;
+        top.appendChild(cnt);
+      }
+      cell.appendChild(top);
+
+      const bar = document.createElement('div');
+      bar.className='loadbar';
+      if(dayActs.length){
+        SITES.forEach(s=>{
+          const c = dayActs.filter(a=>a.site===s.id).length;
+          if(c>0){
+            const seg = document.createElement('span');
+            seg.style.background = s.hex;
+            seg.style.flexGrow = c;
+            bar.appendChild(seg);
+          }
+        });
+      }
+      cell.appendChild(bar);
+
+      cell.addEventListener('click', ()=>{
+        selectedDateStr = dStr;
+        render();
+      });
+
+      grid.appendChild(cell);
+    }
+  }
+
+  function renderDetail(){
+    const heading = document.getElementById('detailHeading');
+    const sub = document.getElementById('detailSub');
+    const list = document.getElementById('activityList');
+
+    const d = new Date(selectedDateStr + 'T00:00:00');
+    heading.textContent = d.toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'long'});
+    sub.textContent = selectedDateStr === todayStr() ? 'Today' : '';
+
+    let dayActs = activities
+      .filter(a=>a.date===selectedDateStr && activeFilters.has(a.site));
+
+    dayActs = sortActivities(dayActs, sortMode);
+
+    list.innerHTML = '';
+    if(dayActs.length===0){
+      const p = document.createElement('div');
+      p.className='empty-note';
+      p.textContent = 'No activities showing for this day.';
+      list.appendChild(p);
+      return;
+    }
+    dayActs.forEach(a=>{
+      const s = siteById(a.site);
+      const item = document.createElement('div');
+      item.className='activity-item' + (a.id===flashId ? ' flash' : '');
+      item.style.borderLeftColor = s ? s.hex : '#999';
+      item.dataset.id = a.id;
+      item.innerHTML = `
+        <button class="a-del" title="Delete" data-id="${a.id}">&times;</button>
+        <div class="a-title">${escapeHtml(a.title)}</div>
+        <div class="a-meta">${s?s.name:''}${a.time? ' · '+a.time : ''}</div>
+        ${a.notes ? `<div class="a-notes">${escapeHtml(a.notes)}</div>` : ''}
+      `;
+      item.querySelector('.a-del').addEventListener('click', (e)=>{
+        e.stopPropagation();
+        deleteActivity(a.id);
+      });
+      list.appendChild(item);
+    });
+
+    if(flashId){
+      const el = list.querySelector(`[data-id="${flashId}"]`);
+      if(el) el.scrollIntoView({block:'nearest'});
+      flashId = null;
+    }
+  }
+
+  function sortActivities(list, mode){
+    const arr = list.slice();
+    if(mode === 'alpha'){
+      arr.sort((a,b)=> a.title.localeCompare(b.title));
+    }else if(mode === 'site'){
+      arr.sort((a,b)=>{
+        const sa = SITES.findIndex(s=>s.id===a.site);
+        const sb = SITES.findIndex(s=>s.id===b.site);
+        if(sa!==sb) return sa-sb;
+        return (a.time||'99:99').localeCompare(b.time||'99:99');
+      });
+    }else{
+      arr.sort((a,b)=> (a.time||'99:99').localeCompare(b.time||'99:99'));
+    }
+    return arr;
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function deleteActivity(id){
+    activities = activities.filter(a=>a.id!==id);
+    await saveActivities();
+    render();
+  }
+
+  function render(){
+    buildGrid();
+    renderDetail();
+  }
+
+  // Nav
+  document.getElementById('prevBtn').addEventListener('click', ()=>{
+    viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth()-1, 1);
+    render();
+  });
+  document.getElementById('nextBtn').addEventListener('click', ()=>{
+    viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 1);
+    render();
+  });
+  document.getElementById('todayBtn').addEventListener('click', ()=>{
+    viewDate = new Date();
+    selectedDateStr = todayStr();
+    render();
+  });
+
+  // Modal
+  const overlay = document.getElementById('overlay');
+  const siteOptionsWrap = document.getElementById('siteOptions');
+  let modalSite = SITES[0].id;
+
+  function buildSiteOptions(){
+    siteOptionsWrap.innerHTML = '';
+    SITES.forEach(s=>{
+      const chip = document.createElement('div');
+      chip.className = 'site-chip' + (s.id===modalSite ? ' active':'');
+      chip.innerHTML = `<span class="swatch" style="background:${s.hex}"></span>${s.name}`;
+      chip.addEventListener('click', ()=>{
+        modalSite = s.id;
+        buildSiteOptions();
+      });
+      siteOptionsWrap.appendChild(chip);
+    });
+  }
+
+  function openModal(){
+    editingId = null;
+    document.getElementById('modalTitle').textContent = 'Add activity';
+    document.getElementById('fTitle').value = '';
+    document.getElementById('fDate').value = selectedDateStr;
+    document.getElementById('fTime').value = '';
+    document.getElementById('fNotes').value = '';
+    modalSite = SITES[0].id;
+    buildSiteOptions();
+    document.getElementById('statusMsg').textContent = '';
+    overlay.classList.add('show');
+    document.getElementById('fTitle').focus();
+  }
+
+  function closeModal(){
+    overlay.classList.remove('show');
+  }
+
+  document.getElementById('openAddBtn').addEventListener('click', openModal);
+  document.getElementById('cancelBtn').addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) closeModal(); });
+
+  document.getElementById('saveBtn').addEventListener('click', async ()=>{
+    const title = document.getElementById('fTitle').value.trim();
+    const date = document.getElementById('fDate').value;
+    const time = document.getElementById('fTime').value;
+    const notes = document.getElementById('fNotes').value.trim();
+    const statusMsg = document.getElementById('statusMsg');
+
+    if(!title || !date){
+      statusMsg.textContent = 'Title and date are required.';
+      statusMsg.style.color = '#B5443B';
+      return;
+    }
+
+    const newAct = {
+      id: 'a_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+      title, date, time, notes,
+      site: modalSite
+    };
+    activities.push(newAct);
+
+    statusMsg.style.color = 'var(--ink-soft)';
+    statusMsg.textContent = 'Saving...';
+    await saveActivities();
+
+    if(storageOK){
+      selectedDateStr = date;
+      viewDate = new Date(date + 'T00:00:00');
+      closeModal();
+      render();
+    }else{
+      statusMsg.textContent = 'Could not save — try again.';
+      statusMsg.style.color = '#B5443B';
+    }
+  });
+
+  // Export
+  function exportableActivities(){
+    return activities
+      .filter(a=>activeFilters.has(a.site))
+      .slice()
+      .sort((a,b)=> (a.date+ (a.time||'')).localeCompare(b.date+(b.time||'')));
+  }
+
+  document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
+    const rows = exportableActivities().map(a=>({
+      Date: a.date,
+      Site: siteById(a.site) ? siteById(a.site).name : a.site,
+      Title: a.title,
+      Time: a.time || '',
+      Notes: a.notes || ''
+    }));
+    if(rows.length===0){ rows.push({Date:'',Site:'',Title:'No activities match current filters',Time:'',Notes:''}); }
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{wch:12},{wch:12},{wch:32},{wch:8},{wch:40}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Activities');
+    XLSX.writeFile(wb, 'activity-calendar.xlsx');
+  });
+
+  document.getElementById('exportPdfBtn').addEventListener('click', ()=>{
+    const rows = exportableActivities();
+    const activeSiteNames = SITES.filter(s=>activeFilters.has(s.id)).map(s=>s.name).join(', ');
+    let html = `<h1>Activity Calendar</h1><div class="print-sub">Sites: ${escapeHtml(activeSiteNames || 'None')} · Generated ${new Date().toLocaleDateString('en-AU')}</div>`;
+    html += '<table><thead><tr><th>Date</th><th>Site</th><th>Title</th><th>Time</th><th>Notes</th></tr></thead><tbody>';
+    if(rows.length===0){
+      html += '<tr><td colspan="5">No activities match current filters.</td></tr>';
+    }else{
+      rows.forEach(a=>{
+        const s = siteById(a.site);
+        html += `<tr><td>${escapeHtml(a.date)}</td><td>${s?escapeHtml(s.name):''}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.time||'')}</td><td>${escapeHtml(a.notes||'')}</td></tr>`;
+      });
+    }
+    html += '</tbody></table>';
+    document.getElementById('printArea').innerHTML = html;
+    window.print();
+  });
+
+  // Sort control
+  document.getElementById('sortSelect').addEventListener('change', (e)=>{
+    sortMode = e.target.value;
+    renderDetail();
+  });
+
+  // Search
+  const searchInput = document.getElementById('searchInput');
+  const searchWrap = document.getElementById('searchWrap');
+  const searchResults = document.getElementById('searchResults');
+  const searchClear = document.getElementById('searchClear');
+
+  function fmtShortDate(dStr){
+    const d = new Date(dStr + 'T00:00:00');
+    return d.toLocaleDateString('en-AU', {day:'numeric', month:'short', year:'numeric'});
+  }
+
+  function runSearch(query){
+    const q = query.trim().toLowerCase();
+    searchWrap.classList.toggle('has-text', q.length>0);
+    if(q.length===0){
+      searchResults.classList.remove('show');
+      searchResults.innerHTML='';
+      return;
+    }
+    const matches = activities
+      .filter(a=> a.title.toLowerCase().includes(q))
+      .sort((a,b)=> a.date.localeCompare(b.date));
+
+    searchResults.innerHTML = '';
+    if(matches.length===0){
+      const empty = document.createElement('div');
+      empty.className='search-empty';
+      empty.textContent = 'No activities match.';
+      searchResults.appendChild(empty);
+    }else{
+      matches.forEach(a=>{
+        const s = siteById(a.site);
+        const row = document.createElement('div');
+        row.className='search-result-item';
+        row.innerHTML = `
+          <span class="swatch" style="background:${s?s.hex:'#999'}"></span>
+          <span class="sr-title">${escapeHtml(a.title)}</span>
+          <span class="sr-date">${fmtShortDate(a.date)}${a.time? ' · '+a.time:''}</span>
+        `;
+        row.addEventListener('click', ()=>{
+          jumpToActivity(a);
+        });
+        searchResults.appendChild(row);
+      });
+    }
+    searchResults.classList.add('show');
+  }
+
+  function jumpToActivity(a){
+    viewDate = new Date(a.date + 'T00:00:00');
+    selectedDateStr = a.date;
+    if(!activeFilters.has(a.site)){
+      activeFilters.add(a.site);
+      buildFilters();
+    }
+    flashId = a.id;
+    searchResults.classList.remove('show');
+    searchInput.value = '';
+    searchWrap.classList.remove('has-text');
+    render();
+  }
+
+  searchInput.addEventListener('input', (e)=> runSearch(e.target.value));
+  searchInput.addEventListener('focus', (e)=>{ if(e.target.value.trim()) runSearch(e.target.value); });
+  searchClear.addEventListener('click', ()=>{
+    searchInput.value='';
+    searchWrap.classList.remove('has-text');
+    searchResults.classList.remove('show');
+    searchInput.focus();
+  });
+  document.addEventListener('click', (e)=>{
+    if(!searchWrap.contains(e.target)) searchResults.classList.remove('show');
+  });
+
+  const SEED_ACTIVITIES = [
+    // July 2026 — Digital Ready (Ryde/Hornsby), split per site
+    {date:'2026-07-27', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-07-27', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-07-28', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-07-28', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-07-29', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-07-29', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-07-30', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-07-30', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-07-31', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-07-31', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-08-17', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-08-17', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-08-17', site:'hornsby', title:'Intro to AI'},
+    {date:'2026-08-18', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-08-18', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-08-18', site:'chatswood', title:'Prime Effect: Game On'},
+    {date:'2026-08-19', site:'chatswood', title:'Prime Effect: Game On'},
+    {date:'2026-08-19', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-08-19', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-08-20', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-08-20', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-08-21', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-08-21', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
+    {date:'2026-08-25', site:'chatswood', title:'Intro to AI'},
+    {date:'2026-08-31', site:'ryde', title:'Gen U Hospitality course'},
+    {date:'2026-09-01', site:'ryde', title:'Gen U Hospitality course'},
+    {date:'2026-09-01', site:'brookvale', title:'Intro to AI'},
+    {date:'2026-09-02', site:'ryde', title:'Gen U Hospitality course'},
+    {date:'2026-09-03', site:'ryde', title:'Gen U Hospitality course'},
+    {date:'2026-09-04', site:'ryde', title:'Gen U Hospitality course'},
+    {date:'2026-09-08', site:'chatswood', title:'Responsible AI'},
+    {date:'2026-09-15', site:'chatswood', title:'Responsible AI'}
+  ];
+
+  async function seedIfNeeded(){
+    if(CONFIG_IS_PLACEHOLDER) return;
+    try{
+      const snap = await docRef.get();
+      const data = snap.exists ? snap.data() : {};
+      if(data.seeded) return;
+
+      const seeded = SEED_ACTIVITIES.map((a,i)=>({
+        id: 'seed_' + i + '_' + a.date + '_' + a.site,
+        title: a.title,
+        site: a.site,
+        date: a.date,
+        time: a.time || '',
+        notes: a.notes || ''
+      }));
+      const existing = data.activities || [];
+      const existingIds = new Set(existing.map(a=>a.id));
+      const merged = existing.slice();
+      seeded.forEach(s=>{ if(!existingIds.has(s.id)) merged.push(s); });
+
+      await docRef.set({ activities: merged, seeded:true }, { merge:true });
+    }catch(e){ /* seeding is best-effort */ }
+  }
+
+  // Init
+  buildFilters();
+  startRealtimeSync();
+})();
+</script>
+
+</body>
+</html>
