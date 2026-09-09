@@ -84,7 +84,7 @@
     letter-spacing:0.01em;
   }
   .nav-btns{display:flex; gap:6px; align-items:center; flex:none;}
-  .nav-btns button{
+  .nav-btns button:not(.today-btn){
     border:1px solid var(--line-strong);
     background:var(--panel);
     color:var(--ink);
@@ -98,7 +98,8 @@
   .today-btn{
     border:1px solid var(--line-strong);
     background:var(--panel);
-    padding:0 14px;
+    padding:0 16px;
+    width:auto;
     height:30px;
     border-radius:7px;
     cursor:pointer;
@@ -127,11 +128,11 @@
   .grid{
     display:grid;
     grid-template-columns:repeat(7,1fr);
-    grid-auto-rows:86px;
+    grid-auto-rows:96px;
     gap:6px;
   }
   @media (max-width:600px){
-    .grid{grid-auto-rows:64px;}
+    .grid{grid-auto-rows:74px;}
   }
   .day{
     position:relative;
@@ -453,6 +454,74 @@
     #printArea table{width:100%; border-collapse:collapse; font-size:11px;}
     #printArea th, #printArea td{border:1px solid #ccc; padding:5px 7px; text-align:left;}
     #printArea th{background:#f0f0f0;}
+    #printArea table.month-print{table-layout:fixed;}
+    #printArea table.month-print th{font-size:9px; text-align:center; padding:4px;}
+    #printArea table.month-print td{
+      vertical-align:top; height:85px; font-size:8.5px; padding:3px 4px; overflow:hidden;
+    }
+    #printArea table.month-print td.outside-month{color:#aaa; background:#fafafa;}
+    #printArea .mp-daynum{font-weight:700; font-size:10px; margin-bottom:2px; display:block;}
+    #printArea .mp-act{margin-bottom:1px; line-height:1.25;}
+    #printArea .mp-dot{display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:3px;}
+  }
+  .field.two-col{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .field.two-col label{margin-bottom:4px;}
+
+  .site-rows{
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+    margin-top:6px;
+  }
+  .site-row{
+    position:relative;
+    height:8px;
+    border-radius:3px;
+    background:transparent;
+  }
+  .site-row.filled{cursor:pointer;}
+  .site-row-fill{
+    display:block;
+    width:100%;
+    height:100%;
+    border-radius:3px;
+    transition:opacity .1s;
+  }
+  .site-row.filled:hover .site-row-fill{opacity:0.8;}
+  .site-tooltip{
+    display:none;
+    position:absolute;
+    bottom:calc(100% + 4px);
+    left:0;
+    background:#fff;
+    border:1px solid var(--line-strong);
+    border-radius:6px;
+    padding:6px 8px;
+    font-size:10.5px;
+    line-height:1.5;
+    white-space:nowrap;
+    z-index:30;
+    box-shadow:0 6px 18px rgba(0,0,0,0.16);
+    text-align:left;
+  }
+  .site-tooltip .st-site{font-weight:700; margin-bottom:2px; display:block;}
+  .site-row.filled:hover .site-tooltip{display:block;}
+
+  .activity-item .a-edit{
+    position:absolute; top:6px; right:26px;
+    border:none; background:none; cursor:pointer;
+    color:var(--ink-soft); font-size:12px; line-height:1;
+    padding:2px;
+  }
+  .activity-item .a-edit:hover{color:var(--ink);}
+  .activity-item .a-id{
+    display:inline-block;
+    font-size:10px;
+    color:var(--ink-soft);
+    background:var(--line);
+    border-radius:4px;
+    padding:1px 5px;
+    margin-left:6px;
   }
 </style>
 </head>
@@ -493,6 +562,8 @@
       <div class="export-buttons">
         <button class="export-btn" id="exportExcelBtn">Export to Excel (.xlsx)</button>
         <button class="export-btn" id="exportPdfBtn">Export to PDF</button>
+        <button class="export-btn" id="printMonthBtn">Print Month View</button>
+        <button class="export-btn" id="exportIcsBtn">Export Calendar (.ics)</button>
       </div>
     </div>
 
@@ -527,16 +598,28 @@
       <input id="fTitle" type="text" placeholder="e.g. Work Foundations group session">
     </div>
     <div class="field">
-      <label>Site</label>
+      <label>Site (select one or more)</label>
       <div class="site-options" id="siteOptions"></div>
     </div>
-    <div class="field">
-      <label>Date</label>
-      <input id="fDate" type="date">
+    <div class="field two-col">
+      <div>
+        <label>Start date</label>
+        <input id="fDateStart" type="date">
+      </div>
+      <div>
+        <label>End date (optional)</label>
+        <input id="fDateEnd" type="date">
+      </div>
     </div>
-    <div class="field">
-      <label>Time (optional)</label>
-      <input id="fTime" type="time">
+    <div class="field two-col">
+      <div>
+        <label>Time (optional)</label>
+        <input id="fTime" type="time">
+      </div>
+      <div>
+        <label>Activity ID (optional)</label>
+        <input id="fActivityId" type="text" inputmode="numeric" placeholder="e.g. 10234">
+      </div>
     </div>
     <div class="field">
       <label>Notes (optional)</label>
@@ -600,6 +683,32 @@
   function todayStr(){ return fmtDate(new Date()); }
   function siteById(id){ return SITES.find(s=>s.id===id); }
 
+  // Converts legacy single-site/single-date records into the new shape,
+  // and fills in defaults for any missing fields on newer records.
+  function normalizeActivity(a){
+    const sites = Array.isArray(a.sites) ? a.sites.slice()
+                : (a.site ? [a.site] : []);
+    const startDate = a.startDate || a.date || '';
+    const endDate = a.endDate || a.startDate || a.date || '';
+    return {
+      id: a.id,
+      title: a.title || '',
+      sites,
+      startDate,
+      endDate,
+      time: a.time || '',
+      activityId: a.activityId || '',
+      notes: a.notes || ''
+    };
+  }
+
+  function activityOnDay(a, dStr){
+    return a.startDate <= dStr && dStr <= a.endDate;
+  }
+  function activityVisible(a){
+    return a.sites.some(s=>activeFilters.has(s));
+  }
+
   function showConfigWarning(){
     const grid = document.getElementById('grid');
     if(grid) grid.insertAdjacentHTML('beforebegin',
@@ -626,7 +735,7 @@
     }
     docRef.onSnapshot((snap)=>{
       const data = snap.exists ? snap.data() : {};
-      activities = data.activities || [];
+      activities = (data.activities || []).map(normalizeActivity);
       render();
       if(!data.seeded){
         seedIfNeeded();
@@ -684,7 +793,7 @@
       const isToday = dStr === todayStr();
       const isSelected = dStr === selectedDateStr;
 
-      const dayActs = activities.filter(a => a.date === dStr && activeFilters.has(a.site));
+      const dayActs = activities.filter(a => activityOnDay(a, dStr) && activityVisible(a));
 
       const cell = document.createElement('div');
       cell.className = 'day' + (isOutside?' outside':'') + (isToday?' today':'') + (isSelected?' selected':'');
@@ -706,20 +815,32 @@
       }
       cell.appendChild(top);
 
-      const bar = document.createElement('div');
-      bar.className='loadbar';
-      if(dayActs.length){
-        SITES.forEach(s=>{
-          const c = dayActs.filter(a=>a.site===s.id).length;
-          if(c>0){
-            const seg = document.createElement('span');
-            seg.style.background = s.hex;
-            seg.style.flexGrow = c;
-            bar.appendChild(seg);
-          }
-        });
-      }
-      cell.appendChild(bar);
+      const rows = document.createElement('div');
+      rows.className='site-rows';
+      SITES.forEach(s=>{
+        const siteActs = activeFilters.has(s.id)
+          ? dayActs.filter(a=>a.sites.includes(s.id))
+          : [];
+        const row = document.createElement('div');
+        row.className = 'site-row' + (siteActs.length ? ' filled' : '');
+        if(siteActs.length){
+          const fill = document.createElement('span');
+          fill.className='site-row-fill';
+          fill.style.background = s.hex;
+          row.appendChild(fill);
+
+          const tip = document.createElement('div');
+          tip.className='site-tooltip';
+          let tipHtml = `<span class="st-site">${escapeHtml(s.name)}</span>`;
+          siteActs.forEach(a=>{
+            tipHtml += `${escapeHtml(a.title)}${a.activityId ? ' — ID '+escapeHtml(a.activityId) : ''}<br>`;
+          });
+          tip.innerHTML = tipHtml;
+          row.appendChild(tip);
+        }
+        rows.appendChild(row);
+      });
+      cell.appendChild(rows);
 
       cell.addEventListener('click', ()=>{
         selectedDateStr = dStr;
@@ -740,7 +861,7 @@
     sub.textContent = selectedDateStr === todayStr() ? 'Today' : '';
 
     let dayActs = activities
-      .filter(a=>a.date===selectedDateStr && activeFilters.has(a.site));
+      .filter(a=>activityOnDay(a, selectedDateStr) && activityVisible(a));
 
     dayActs = sortActivities(dayActs, sortMode);
 
@@ -753,20 +874,28 @@
       return;
     }
     dayActs.forEach(a=>{
-      const s = siteById(a.site);
+      const visibleSites = a.sites.filter(s=>activeFilters.has(s)).map(s=>siteById(s)).filter(Boolean);
+      const primary = visibleSites[0];
       const item = document.createElement('div');
       item.className='activity-item' + (a.id===flashId ? ' flash' : '');
-      item.style.borderLeftColor = s ? s.hex : '#999';
+      item.style.borderLeftColor = primary ? primary.hex : '#999';
       item.dataset.id = a.id;
+      const siteNames = visibleSites.map(s=>s.name).join(', ');
+      const dateRange = a.startDate === a.endDate ? '' : ` · ${a.startDate} to ${a.endDate}`;
       item.innerHTML = `
         <button class="a-del" title="Delete" data-id="${a.id}">&times;</button>
-        <div class="a-title">${escapeHtml(a.title)}</div>
-        <div class="a-meta">${s?s.name:''}${a.time? ' · '+a.time : ''}</div>
+        <button class="a-edit" title="Edit" data-id="${a.id}">&#9998;</button>
+        <div class="a-title">${escapeHtml(a.title)}${a.activityId ? `<span class="a-id">ID ${escapeHtml(a.activityId)}</span>` : ''}</div>
+        <div class="a-meta">${siteNames}${a.time? ' · '+a.time : ''}${dateRange}</div>
         ${a.notes ? `<div class="a-notes">${escapeHtml(a.notes)}</div>` : ''}
       `;
       item.querySelector('.a-del').addEventListener('click', (e)=>{
         e.stopPropagation();
         deleteActivity(a.id);
+      });
+      item.querySelector('.a-edit').addEventListener('click', (e)=>{
+        e.stopPropagation();
+        openModal(a);
       });
       list.appendChild(item);
     });
@@ -784,8 +913,8 @@
       arr.sort((a,b)=> a.title.localeCompare(b.title));
     }else if(mode === 'site'){
       arr.sort((a,b)=>{
-        const sa = SITES.findIndex(s=>s.id===a.site);
-        const sb = SITES.findIndex(s=>s.id===b.site);
+        const sa = SITES.findIndex(s=>a.sites.includes(s.id));
+        const sb = SITES.findIndex(s=>b.sites.includes(s.id));
         if(sa!==sb) return sa-sb;
         return (a.time||'99:99').localeCompare(b.time||'99:99');
       });
@@ -830,31 +959,73 @@
   // Modal
   const overlay = document.getElementById('overlay');
   const siteOptionsWrap = document.getElementById('siteOptions');
-  let modalSite = SITES[0].id;
+  let modalSites = new Set();
+  let conflictConfirmed = false;
+
+  function findConflicts(sites, startDate, endDate, time, excludeId){
+    return activities.filter(a=>{
+      if(a.id===excludeId) return false;
+      if(!a.sites.some(s=>sites.includes(s))) return false;
+      if(!(startDate <= a.endDate && a.startDate <= endDate)) return false;
+      if(time && a.time && time !== a.time) return false; // both have times and they differ — not a conflict
+      return true;
+    });
+  }
 
   function buildSiteOptions(){
     siteOptionsWrap.innerHTML = '';
     SITES.forEach(s=>{
       const chip = document.createElement('div');
-      chip.className = 'site-chip' + (s.id===modalSite ? ' active':'');
+      chip.className = 'site-chip' + (modalSites.has(s.id) ? ' active':'');
       chip.innerHTML = `<span class="swatch" style="background:${s.hex}"></span>${s.name}`;
       chip.addEventListener('click', ()=>{
-        modalSite = s.id;
+        if(modalSites.has(s.id)) modalSites.delete(s.id);
+        else modalSites.add(s.id);
+        conflictConfirmed = false;
+        document.getElementById('saveBtn').textContent = 'Save';
         buildSiteOptions();
       });
       siteOptionsWrap.appendChild(chip);
     });
   }
 
-  function openModal(){
-    editingId = null;
-    document.getElementById('modalTitle').textContent = 'Add activity';
-    document.getElementById('fTitle').value = '';
-    document.getElementById('fDate').value = selectedDateStr;
-    document.getElementById('fTime').value = '';
-    document.getElementById('fNotes').value = '';
-    modalSite = SITES[0].id;
+  const activityIdInput = document.getElementById('fActivityId');
+  activityIdInput.addEventListener('input', (e)=>{
+    e.target.value = e.target.value.replace(/[^0-9]/g, '');
+  });
+
+  ['fDateStart','fDateEnd','fTime','fTitle'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', ()=>{
+      conflictConfirmed = false;
+      document.getElementById('saveBtn').textContent = 'Save';
+    });
+  });
+
+  function openModal(activityToEdit){
+    if(activityToEdit){
+      editingId = activityToEdit.id;
+      document.getElementById('modalTitle').textContent = 'Edit activity';
+      document.getElementById('fTitle').value = activityToEdit.title;
+      document.getElementById('fDateStart').value = activityToEdit.startDate;
+      document.getElementById('fDateEnd').value = activityToEdit.endDate;
+      document.getElementById('fTime').value = activityToEdit.time || '';
+      document.getElementById('fActivityId').value = activityToEdit.activityId || '';
+      document.getElementById('fNotes').value = activityToEdit.notes || '';
+      modalSites = new Set(activityToEdit.sites);
+    }else{
+      editingId = null;
+      document.getElementById('modalTitle').textContent = 'Add activity';
+      document.getElementById('fTitle').value = '';
+      document.getElementById('fDateStart').value = selectedDateStr;
+      document.getElementById('fDateEnd').value = selectedDateStr;
+      document.getElementById('fTime').value = '';
+      document.getElementById('fActivityId').value = '';
+      document.getElementById('fNotes').value = '';
+      modalSites = new Set([SITES[0].id]);
+    }
     buildSiteOptions();
+    conflictConfirmed = false;
+    document.getElementById('saveBtn').textContent = 'Save';
     document.getElementById('statusMsg').textContent = '';
     overlay.classList.add('show');
     document.getElementById('fTitle').focus();
@@ -864,37 +1035,68 @@
     overlay.classList.remove('show');
   }
 
-  document.getElementById('openAddBtn').addEventListener('click', openModal);
+  document.getElementById('openAddBtn').addEventListener('click', ()=>openModal(null));
   document.getElementById('cancelBtn').addEventListener('click', closeModal);
   overlay.addEventListener('click', (e)=>{ if(e.target===overlay) closeModal(); });
 
   document.getElementById('saveBtn').addEventListener('click', async ()=>{
     const title = document.getElementById('fTitle').value.trim();
-    const date = document.getElementById('fDate').value;
+    const startDate = document.getElementById('fDateStart').value;
+    let endDate = document.getElementById('fDateEnd').value;
     const time = document.getElementById('fTime').value;
+    const activityId = document.getElementById('fActivityId').value.trim();
     const notes = document.getElementById('fNotes').value.trim();
     const statusMsg = document.getElementById('statusMsg');
 
-    if(!title || !date){
-      statusMsg.textContent = 'Title and date are required.';
+    if(!endDate) endDate = startDate;
+
+    if(!title || !startDate || modalSites.size===0){
+      statusMsg.textContent = 'Title, at least one site, and a start date are required.';
+      statusMsg.style.color = '#B5443B';
+      return;
+    }
+    if(endDate < startDate){
+      statusMsg.textContent = 'End date can\'t be before the start date.';
       statusMsg.style.color = '#B5443B';
       return;
     }
 
-    const newAct = {
-      id: 'a_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-      title, date, time, notes,
-      site: modalSite
-    };
-    activities.push(newAct);
+    const sitesArr = Array.from(modalSites);
+
+    if(!conflictConfirmed){
+      const conflicts = findConflicts(sitesArr, startDate, endDate, time, editingId);
+      if(conflicts.length > 0){
+        const names = conflicts.map(c=>{
+          const siteNames = c.sites.map(s=>siteById(s)?siteById(s).name:s).join(', ');
+          return `${c.title} (${siteNames}${c.time? ', '+c.time : ''})`;
+        }).join('; ');
+        statusMsg.style.color = '#B5443B';
+        statusMsg.textContent = `Possible double-booking with: ${names}. Click Save again to save anyway.`;
+        conflictConfirmed = true;
+        document.getElementById('saveBtn').textContent = 'Save anyway';
+        return;
+      }
+    }
+
+    if(editingId){
+      const idx = activities.findIndex(a=>a.id===editingId);
+      if(idx>-1){
+        activities[idx] = { ...activities[idx], title, sites:sitesArr, startDate, endDate, time, activityId, notes };
+      }
+    }else{
+      activities.push({
+        id: 'a_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+        title, sites:sitesArr, startDate, endDate, time, activityId, notes
+      });
+    }
 
     statusMsg.style.color = 'var(--ink-soft)';
     statusMsg.textContent = 'Saving...';
     await saveActivities();
 
     if(storageOK){
-      selectedDateStr = date;
-      viewDate = new Date(date + 'T00:00:00');
+      selectedDateStr = startDate;
+      viewDate = new Date(startDate + 'T00:00:00');
       closeModal();
       render();
     }else{
@@ -904,24 +1106,41 @@
   });
 
   // Export
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function toICSDateStr(dateStr){ return dateStr.replace(/-/g,''); }
+  function addOneDay(dateStr){
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate()+1);
+    return fmtDate(d);
+  }
+  function icsEscape(str){
+    return String(str||'')
+      .replace(/\\/g,'\\\\')
+      .replace(/;/g,'\\;')
+      .replace(/,/g,'\\,')
+      .replace(/\n/g,'\\n');
+  }
+
   function exportableActivities(){
     return activities
-      .filter(a=>activeFilters.has(a.site))
+      .filter(activityVisible)
       .slice()
-      .sort((a,b)=> (a.date+ (a.time||'')).localeCompare(b.date+(b.time||'')));
+      .sort((a,b)=> (a.startDate+(a.time||'')).localeCompare(b.startDate+(b.time||'')));
   }
 
   document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
     const rows = exportableActivities().map(a=>({
-      Date: a.date,
-      Site: siteById(a.site) ? siteById(a.site).name : a.site,
+      'Start Date': a.startDate,
+      'End Date': a.endDate,
+      Sites: a.sites.filter(s=>activeFilters.has(s)).map(s=> siteById(s)? siteById(s).name : s).join(', '),
       Title: a.title,
+      'Activity ID': a.activityId || '',
       Time: a.time || '',
       Notes: a.notes || ''
     }));
-    if(rows.length===0){ rows.push({Date:'',Site:'',Title:'No activities match current filters',Time:'',Notes:''}); }
+    if(rows.length===0){ rows.push({'Start Date':'','End Date':'',Sites:'',Title:'No activities match current filters','Activity ID':'',Time:'',Notes:''}); }
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{wch:12},{wch:12},{wch:32},{wch:8},{wch:40}];
+    ws['!cols'] = [{wch:11},{wch:11},{wch:20},{wch:32},{wch:11},{wch:8},{wch:40}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Activities');
     XLSX.writeFile(wb, 'activity-calendar.xlsx');
@@ -931,18 +1150,95 @@
     const rows = exportableActivities();
     const activeSiteNames = SITES.filter(s=>activeFilters.has(s.id)).map(s=>s.name).join(', ');
     let html = `<h1>Activity Calendar</h1><div class="print-sub">Sites: ${escapeHtml(activeSiteNames || 'None')} · Generated ${new Date().toLocaleDateString('en-AU')}</div>`;
-    html += '<table><thead><tr><th>Date</th><th>Site</th><th>Title</th><th>Time</th><th>Notes</th></tr></thead><tbody>';
+    html += '<table><thead><tr><th>Start</th><th>End</th><th>Sites</th><th>Title</th><th>Activity ID</th><th>Time</th><th>Notes</th></tr></thead><tbody>';
     if(rows.length===0){
-      html += '<tr><td colspan="5">No activities match current filters.</td></tr>';
+      html += '<tr><td colspan="7">No activities match current filters.</td></tr>';
     }else{
       rows.forEach(a=>{
-        const s = siteById(a.site);
-        html += `<tr><td>${escapeHtml(a.date)}</td><td>${s?escapeHtml(s.name):''}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.time||'')}</td><td>${escapeHtml(a.notes||'')}</td></tr>`;
+        const siteNames = a.sites.filter(s=>activeFilters.has(s)).map(s=> siteById(s)? siteById(s).name : s).join(', ');
+        html += `<tr><td>${escapeHtml(a.startDate)}</td><td>${escapeHtml(a.endDate)}</td><td>${escapeHtml(siteNames)}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.activityId||'')}</td><td>${escapeHtml(a.time||'')}</td><td>${escapeHtml(a.notes||'')}</td></tr>`;
       });
     }
     html += '</tbody></table>';
     document.getElementById('printArea').innerHTML = html;
     window.print();
+  });
+
+  document.getElementById('printMonthBtn').addEventListener('click', ()=>{
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const firstOfMonth = new Date(year, month, 1);
+    let startOffset = firstOfMonth.getDay() - 1;
+    if(startOffset < 0) startOffset = 6;
+    const gridStart = new Date(year, month, 1 - startOffset);
+
+    const activeSiteNames = SITES.filter(s=>activeFilters.has(s.id)).map(s=>s.name).join(', ');
+    let html = `<h1>Activity Calendar — ${escapeHtml(monthLabel(viewDate))}</h1>`;
+    html += `<div class="print-sub">Sites: ${escapeHtml(activeSiteNames || 'None')} · Generated ${new Date().toLocaleDateString('en-AU')}</div>`;
+    html += '<table class="month-print"><thead><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr></thead><tbody>';
+
+    for(let week=0; week<6; week++){
+      html += '<tr>';
+      for(let d=0; d<7; d++){
+        const cellDate = new Date(gridStart);
+        cellDate.setDate(gridStart.getDate() + week*7 + d);
+        const dStr = fmtDate(cellDate);
+        const isOutside = cellDate.getMonth() !== month;
+        const dayActs = activities.filter(a => activityOnDay(a, dStr) && activityVisible(a));
+
+        html += `<td class="${isOutside?'outside-month':''}"><span class="mp-daynum">${cellDate.getDate()}</span>`;
+        dayActs.forEach(a=>{
+          const primary = siteById(a.sites.find(s=>activeFilters.has(s)));
+          html += `<div class="mp-act"><span class="mp-dot" style="background:${primary?primary.hex:'#999'}"></span>${escapeHtml(a.title)}</div>`;
+        });
+        html += '</td>';
+      }
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+
+    document.getElementById('printArea').innerHTML = html;
+    window.print();
+  });
+
+  document.getElementById('exportIcsBtn').addEventListener('click', ()=>{
+    const rows = exportableActivities();
+    const stamp = new Date().toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z';
+    let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WISE Activity Calendar//EN\r\nCALSCALE:GREGORIAN\r\n';
+
+    rows.forEach(a=>{
+      const siteNames = a.sites.filter(s=>activeFilters.has(s)).map(s=> siteById(s)? siteById(s).name : s).join(', ');
+      let desc = siteNames;
+      if(a.activityId) desc += ' | ID ' + a.activityId;
+      if(a.notes) desc += ' | ' + a.notes;
+
+      ics += 'BEGIN:VEVENT\r\n';
+      ics += 'UID:' + a.id + '@wise-activity-calendar\r\n';
+      ics += 'DTSTAMP:' + stamp + '\r\n';
+      if(a.time){
+        const t = a.time.replace(':','') + '00';
+        ics += 'DTSTART:' + toICSDateStr(a.startDate) + 'T' + t + '\r\n';
+        ics += 'DTEND:' + toICSDateStr(a.endDate) + 'T' + t + '\r\n';
+      }else{
+        ics += 'DTSTART;VALUE=DATE:' + toICSDateStr(a.startDate) + '\r\n';
+        ics += 'DTEND;VALUE=DATE:' + toICSDateStr(addOneDay(a.endDate)) + '\r\n';
+      }
+      ics += 'SUMMARY:' + icsEscape(a.title) + '\r\n';
+      ics += 'DESCRIPTION:' + icsEscape(desc) + '\r\n';
+      ics += 'LOCATION:' + icsEscape(siteNames) + '\r\n';
+      ics += 'END:VEVENT\r\n';
+    });
+    ics += 'END:VCALENDAR\r\n';
+
+    const blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'activity-calendar.ics';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   });
 
   // Sort control
@@ -972,7 +1268,7 @@
     }
     const matches = activities
       .filter(a=> a.title.toLowerCase().includes(q))
-      .sort((a,b)=> a.date.localeCompare(b.date));
+      .sort((a,b)=> a.startDate.localeCompare(b.startDate));
 
     searchResults.innerHTML = '';
     if(matches.length===0){
@@ -982,13 +1278,13 @@
       searchResults.appendChild(empty);
     }else{
       matches.forEach(a=>{
-        const s = siteById(a.site);
+        const primary = siteById(a.sites[0]);
         const row = document.createElement('div');
         row.className='search-result-item';
         row.innerHTML = `
-          <span class="swatch" style="background:${s?s.hex:'#999'}"></span>
+          <span class="swatch" style="background:${primary?primary.hex:'#999'}"></span>
           <span class="sr-title">${escapeHtml(a.title)}</span>
-          <span class="sr-date">${fmtShortDate(a.date)}${a.time? ' · '+a.time:''}</span>
+          <span class="sr-date">${fmtShortDate(a.startDate)}${a.time? ' · '+a.time:''}</span>
         `;
         row.addEventListener('click', ()=>{
           jumpToActivity(a);
@@ -1000,12 +1296,13 @@
   }
 
   function jumpToActivity(a){
-    viewDate = new Date(a.date + 'T00:00:00');
-    selectedDateStr = a.date;
-    if(!activeFilters.has(a.site)){
-      activeFilters.add(a.site);
-      buildFilters();
-    }
+    viewDate = new Date(a.startDate + 'T00:00:00');
+    selectedDateStr = a.startDate;
+    let filtersChanged = false;
+    a.sites.forEach(s=>{
+      if(!activeFilters.has(s)){ activeFilters.add(s); filtersChanged = true; }
+    });
+    if(filtersChanged) buildFilters();
     flashId = a.id;
     searchResults.classList.remove('show');
     searchInput.value = '';
@@ -1026,39 +1323,24 @@
   });
 
   const SEED_ACTIVITIES = [
-    // July 2026 — Digital Ready (Ryde/Hornsby), split per site
-    {date:'2026-07-27', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-07-27', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-07-28', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-07-28', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-07-29', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-07-29', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-07-30', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-07-30', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-07-31', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-07-31', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-08-17', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-08-17', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-08-17', site:'hornsby', title:'Intro to AI'},
-    {date:'2026-08-18', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-08-18', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-08-18', site:'chatswood', title:'Prime Effect: Game On'},
-    {date:'2026-08-19', site:'chatswood', title:'Prime Effect: Game On'},
-    {date:'2026-08-19', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-08-19', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-08-20', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-08-20', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-08-21', site:'ryde', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-08-21', site:'hornsby', title:'Digital Ready', notes:'Runs across Ryde & Hornsby'},
-    {date:'2026-08-25', site:'chatswood', title:'Intro to AI'},
-    {date:'2026-08-31', site:'ryde', title:'Gen U Hospitality course'},
-    {date:'2026-09-01', site:'ryde', title:'Gen U Hospitality course'},
-    {date:'2026-09-01', site:'brookvale', title:'Intro to AI'},
-    {date:'2026-09-02', site:'ryde', title:'Gen U Hospitality course'},
-    {date:'2026-09-03', site:'ryde', title:'Gen U Hospitality course'},
-    {date:'2026-09-04', site:'ryde', title:'Gen U Hospitality course'},
-    {date:'2026-09-08', site:'chatswood', title:'Responsible AI'},
-    {date:'2026-09-15', site:'chatswood', title:'Responsible AI'}
+    {startDate:'2026-07-27', endDate:'2026-07-27', sites:['ryde','hornsby'], title:'Digital Ready'},
+    {startDate:'2026-07-28', endDate:'2026-07-28', sites:['ryde','hornsby'], title:'Digital Ready'},
+    {startDate:'2026-07-29', endDate:'2026-07-29', sites:['ryde','hornsby'], title:'Digital Ready'},
+    {startDate:'2026-07-30', endDate:'2026-07-30', sites:['ryde','hornsby'], title:'Digital Ready'},
+    {startDate:'2026-07-31', endDate:'2026-07-31', sites:['ryde','hornsby'], title:'Digital Ready'},
+    {startDate:'2026-08-17', endDate:'2026-08-17', sites:['ryde','hornsby'], title:'Digital Ready'},
+    {startDate:'2026-08-17', endDate:'2026-08-17', sites:['hornsby'], title:'Intro to AI'},
+    {startDate:'2026-08-18', endDate:'2026-08-18', sites:['ryde','hornsby'], title:'Digital Ready'},
+    {startDate:'2026-08-18', endDate:'2026-08-18', sites:['chatswood'], title:'Prime Effect: Game On'},
+    {startDate:'2026-08-19', endDate:'2026-08-19', sites:['chatswood'], title:'Prime Effect: Game On'},
+    {startDate:'2026-08-19', endDate:'2026-08-19', sites:['ryde','hornsby'], title:'Digital Ready'},
+    {startDate:'2026-08-20', endDate:'2026-08-20', sites:['ryde','hornsby'], title:'Digital Ready'},
+    {startDate:'2026-08-21', endDate:'2026-08-21', sites:['ryde','hornsby'], title:'Digital Ready'},
+    {startDate:'2026-08-25', endDate:'2026-08-25', sites:['chatswood'], title:'Intro to AI'},
+    {startDate:'2026-08-31', endDate:'2026-09-04', sites:['ryde'], title:'Gen U Hospitality course'},
+    {startDate:'2026-09-01', endDate:'2026-09-01', sites:['brookvale'], title:'Intro to AI'},
+    {startDate:'2026-09-08', endDate:'2026-09-08', sites:['chatswood'], title:'Responsible AI'},
+    {startDate:'2026-09-15', endDate:'2026-09-15', sites:['chatswood'], title:'Responsible AI'}
   ];
 
   async function seedIfNeeded(){
@@ -1069,14 +1351,16 @@
       if(data.seeded) return;
 
       const seeded = SEED_ACTIVITIES.map((a,i)=>({
-        id: 'seed_' + i + '_' + a.date + '_' + a.site,
+        id: 'seed_' + i + '_' + a.startDate + '_' + a.sites.join('-'),
         title: a.title,
-        site: a.site,
-        date: a.date,
-        time: a.time || '',
-        notes: a.notes || ''
+        sites: a.sites,
+        startDate: a.startDate,
+        endDate: a.endDate,
+        time: '',
+        activityId: '',
+        notes: a.sites.length>1 ? ('Runs across ' + a.sites.map(s=>siteById(s)?siteById(s).name:s).join(' & ')) : ''
       }));
-      const existing = data.activities || [];
+      const existing = (data.activities || []).map(normalizeActivity);
       const existingIds = new Set(existing.map(a=>a.id));
       const merged = existing.slice();
       seeded.forEach(s=>{ if(!existingIds.has(s.id)) merged.push(s); });
