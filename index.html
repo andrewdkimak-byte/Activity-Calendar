@@ -6,6 +6,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-firestore-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-auth-compat.min.js"></script>
 <style>
   :root{
     --paper:#F7F6F2;
@@ -532,6 +533,20 @@
     <div>
       <h1>Activity Calendar</h1>
       <div class="sub">Ryde · Hornsby · Chatswood · Brookvale</div>
+      <div id="authWidget" style="margin-top:8px; font-size:12px;">
+        <button id="signInBtn" class="today-btn" style="text-transform:none;">Sign in to edit</button>
+        <div id="signInForm" style="display:none; margin-top:6px; gap:6px; align-items:center;">
+          <input id="authEmail" type="email" placeholder="Email" style="padding:6px 8px; border:1px solid var(--line-strong); border-radius:6px; font-size:12px; margin-right:4px;">
+          <input id="authPassword" type="password" placeholder="Password" style="padding:6px 8px; border:1px solid var(--line-strong); border-radius:6px; font-size:12px; margin-right:4px;">
+          <button id="authSubmitBtn" class="today-btn" style="text-transform:none;">Sign in</button>
+          <button id="authCancelBtn" class="today-btn" style="text-transform:none;">Cancel</button>
+          <div id="authError" style="color:#B5443B; font-size:11px; margin-top:4px;"></div>
+        </div>
+        <div id="signedInWidget" style="display:none; align-items:center; gap:8px;">
+          <span style="color:var(--ink-soft);">Signed in as <span id="authUserEmail"></span></span>
+          <button id="signOutBtn" class="today-btn" style="text-transform:none;">Sign out</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -586,6 +601,11 @@
       </div>
       <div id="activityList"></div>
       <button class="add-btn" id="openAddBtn">+ Add activity</button>
+    </div>
+
+    <div class="card">
+      <h2>Next 14 Days</h2>
+      <div id="twoWeekList" style="max-height:280px; overflow-y:auto;"></div>
     </div>
   </div>
 </div>
@@ -654,10 +674,13 @@
 
   let db = null;
   let docRef = null;
+  let auth = null;
+  let isEditor = false;
   if(!CONFIG_IS_PLACEHOLDER){
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
     docRef = db.collection('wise_calendar').doc('main');
+    auth = firebase.auth();
   }
 
   const SITES = [
@@ -855,6 +878,8 @@
     const heading = document.getElementById('detailHeading');
     const sub = document.getElementById('detailSub');
     const list = document.getElementById('activityList');
+    const addBtn = document.getElementById('openAddBtn');
+    if(addBtn) addBtn.style.display = isEditor ? 'block' : 'none';
 
     const d = new Date(selectedDateStr + 'T00:00:00');
     heading.textContent = d.toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'long'});
@@ -883,20 +908,22 @@
       const siteNames = visibleSites.map(s=>s.name).join(', ');
       const dateRange = a.startDate === a.endDate ? '' : ` · ${a.startDate} to ${a.endDate}`;
       item.innerHTML = `
-        <button class="a-del" title="Delete" data-id="${a.id}">&times;</button>
-        <button class="a-edit" title="Edit" data-id="${a.id}">&#9998;</button>
+        ${isEditor ? `<button class="a-del" title="Delete" data-id="${a.id}">&times;</button>
+        <button class="a-edit" title="Edit" data-id="${a.id}">&#9998;</button>` : ''}
         <div class="a-title">${escapeHtml(a.title)}${a.activityId ? `<span class="a-id">ID ${escapeHtml(a.activityId)}</span>` : ''}</div>
         <div class="a-meta">${siteNames}${a.time? ' · '+a.time : ''}${dateRange}</div>
         ${a.notes ? `<div class="a-notes">${escapeHtml(a.notes)}</div>` : ''}
       `;
-      item.querySelector('.a-del').addEventListener('click', (e)=>{
-        e.stopPropagation();
-        deleteActivity(a.id);
-      });
-      item.querySelector('.a-edit').addEventListener('click', (e)=>{
-        e.stopPropagation();
-        openModal(a);
-      });
+      if(isEditor){
+        item.querySelector('.a-del').addEventListener('click', (e)=>{
+          e.stopPropagation();
+          deleteActivity(a.id);
+        });
+        item.querySelector('.a-edit').addEventListener('click', (e)=>{
+          e.stopPropagation();
+          openModal(a);
+        });
+      }
       list.appendChild(item);
     });
 
@@ -936,9 +963,52 @@
     render();
   }
 
+  function renderTwoWeek(){
+    const container = document.getElementById('twoWeekList');
+    if(!container) return;
+    container.innerHTML = '';
+    const start = new Date(); start.setHours(0,0,0,0);
+    let any = false;
+
+    for(let i=0; i<14; i++){
+      const d = new Date(start);
+      d.setDate(d.getDate()+i);
+      const dStr = fmtDate(d);
+      const dayActs = activities.filter(a=>activityOnDay(a, dStr) && activityVisible(a));
+      if(dayActs.length===0) continue;
+      any = true;
+
+      const label = d.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
+      const block = document.createElement('div');
+      block.style.marginBottom = '10px';
+      block.innerHTML = `<div style="font-size:11px; font-weight:700; margin-bottom:3px;">${escapeHtml(label)}</div>`;
+
+      dayActs.forEach(a=>{
+        const primarySite = a.sites.find(s=>activeFilters.has(s));
+        const primary = siteById(primarySite);
+        const row = document.createElement('div');
+        row.style.cssText = 'font-size:11px; margin-bottom:2px; padding-left:2px; cursor:pointer;';
+        row.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${primary?primary.hex:'#999'};margin-right:5px;"></span>${escapeHtml(a.title)}`;
+        row.addEventListener('click', ()=>{
+          selectedDateStr = dStr;
+          viewDate = new Date(dStr + 'T00:00:00');
+          flashId = a.id;
+          render();
+        });
+        block.appendChild(row);
+      });
+      container.appendChild(block);
+    }
+
+    if(!any){
+      container.innerHTML = '<div class="empty-note">No activities in the next 14 days.</div>';
+    }
+  }
+
   function render(){
     buildGrid();
     renderDetail();
+    renderTwoWeek();
   }
 
   // Nav
@@ -1372,6 +1442,52 @@
   // Init
   buildFilters();
   startRealtimeSync();
+
+  // Auth
+  const signInBtn = document.getElementById('signInBtn');
+  const signInForm = document.getElementById('signInForm');
+  const signedInWidget = document.getElementById('signedInWidget');
+  const authError = document.getElementById('authError');
+
+  if(auth){
+    auth.onAuthStateChanged((user)=>{
+      isEditor = !!user;
+      if(user){
+        signInBtn.style.display = 'none';
+        signInForm.style.display = 'none';
+        signedInWidget.style.display = 'flex';
+        document.getElementById('authUserEmail').textContent = user.email;
+      }else{
+        signInBtn.style.display = 'inline-block';
+        signInForm.style.display = 'none';
+        signedInWidget.style.display = 'none';
+      }
+      render();
+    });
+  }else{
+    signInBtn.style.display = 'none';
+  }
+
+  signInBtn.addEventListener('click', ()=>{
+    signInForm.style.display = 'flex';
+    signInBtn.style.display = 'none';
+    authError.textContent = '';
+  });
+  document.getElementById('authCancelBtn').addEventListener('click', ()=>{
+    signInForm.style.display = 'none';
+    signInBtn.style.display = 'inline-block';
+  });
+  document.getElementById('authSubmitBtn').addEventListener('click', ()=>{
+    const email = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+    authError.textContent = '';
+    auth.signInWithEmailAndPassword(email, password).catch((err)=>{
+      authError.textContent = 'Could not sign in — check email and password.';
+    });
+  });
+  document.getElementById('signOutBtn').addEventListener('click', ()=>{
+    auth.signOut();
+  });
 })();
 </script>
 
