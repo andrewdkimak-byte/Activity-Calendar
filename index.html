@@ -1482,7 +1482,7 @@
     const password = document.getElementById('authPassword').value;
     authError.textContent = '';
     auth.signInWithEmailAndPassword(email, password).catch((err)=>{
-      authError.textContent = 'Could not sign in — check email and password.';
+      authError.textContent = 'Could not sign in: ' + err.message + ' (' + err.code + ')';
     });
   });
   document.getElementById('signOutBtn').addEventListener('click', ()=>{
