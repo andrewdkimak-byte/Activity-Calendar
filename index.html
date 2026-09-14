@@ -33,14 +33,19 @@
   }
   .app{
     display:grid;
-    grid-template-columns: 1fr 320px;
+    grid-template-columns: 1fr 320px 320px;
     gap:20px;
     padding:20px;
-    max-width:1280px;
+    max-width:1620px;
     margin:0 auto;
+  }
+  @media (max-width: 1180px){
+    .app{grid-template-columns:1fr 320px;}
+    .sidebar-secondary{grid-column: 2;}
   }
   @media (max-width: 860px){
     .app{grid-template-columns:1fr;}
+    .sidebar-secondary{grid-column: 1;}
   }
 
   /* Header */
@@ -618,6 +623,10 @@
     <div class="card">
       <h2>Filter by site</h2>
       <div class="filters" id="filters"></div>
+      <label class="filter-row" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line);">
+        <input type="checkbox" id="hideCancelledToggle" checked>
+        <span>Hide cancelled <span id="hiddenCancelledCount" style="color:var(--ink-soft);"></span></span>
+      </label>
       <button class="export-btn" id="copyFilterLinkBtn" style="width:100%; margin-top:10px;">Copy link for this view</button>
     </div>
 
@@ -636,7 +645,9 @@
       <div id="activityList"></div>
       <button class="add-btn" id="openAddBtn">+ Add activity</button>
     </div>
+  </div>
 
+  <div class="sidebar sidebar-secondary">
     <div class="card">
       <button class="export-btn" id="jumpNextBtn" style="width:100%;">Jump to Next Activity →</button>
     </div>
@@ -936,6 +947,18 @@
     return a.sites.some(s=>activeFilters.has(s));
   }
 
+  let hideCancelled = true;
+  function browseVisible(a){
+    return activityVisible(a) && !(hideCancelled && a.status === 'cancelled');
+  }
+  function updateHiddenCancelledCount(){
+    const el = document.getElementById('hiddenCancelledCount');
+    if(!el) return;
+    if(!hideCancelled){ el.textContent = ''; return; }
+    const count = activities.filter(a=>activityVisible(a) && a.status === 'cancelled').length;
+    el.textContent = count > 0 ? `(${count} hidden)` : '';
+  }
+
   function showConfigWarning(){
     const grid = document.getElementById('grid');
     if(grid) grid.insertAdjacentHTML('beforebegin',
@@ -1046,7 +1069,7 @@
       const isToday = dStr === todayStr();
       const isSelected = dStr === selectedDateStr;
 
-      const dayActs = activities.filter(a => activityOnDay(a, dStr) && activityVisible(a));
+      const dayActs = activities.filter(a => activityOnDay(a, dStr) && browseVisible(a));
 
       const cell = document.createElement('div');
       const isWeekend = (i % 7 === 5 || i % 7 === 6);
@@ -1173,7 +1196,7 @@
     sub.textContent = selectedDateStr === todayStr() ? 'Today' : '';
 
     let dayActs = activities
-      .filter(a=>activityOnDay(a, selectedDateStr) && activityVisible(a));
+      .filter(a=>activityOnDay(a, selectedDateStr) && browseVisible(a));
 
     dayActs = sortActivities(dayActs, sortMode);
 
@@ -1334,7 +1357,7 @@
       const d = new Date(start);
       d.setDate(d.getDate()+i);
       const dStr = fmtDate(d);
-      const dayActs = activities.filter(a=>activityOnDay(a, dStr) && activityVisible(a));
+      const dayActs = activities.filter(a=>activityOnDay(a, dStr) && browseVisible(a));
       if(dayActs.length===0) continue;
       any = true;
 
@@ -1403,6 +1426,7 @@
     renderDetail();
     renderTwoWeek();
     renderStats();
+    updateHiddenCancelledCount();
   }
 
   // Nav
@@ -1721,7 +1745,7 @@
         cellDate.setDate(gridStart.getDate() + week*7 + d);
         const dStr = fmtDate(cellDate);
         const isOutside = cellDate.getMonth() !== month;
-        const dayActs = activities.filter(a => activityOnDay(a, dStr) && activityVisible(a));
+        const dayActs = activities.filter(a => activityOnDay(a, dStr) && browseVisible(a));
 
         html += `<td class="${isOutside?'outside-month':''}"><span class="mp-daynum">${cellDate.getDate()}</span>`;
         dayActs.forEach(a=>{
@@ -1787,7 +1811,7 @@
     for(let i=0; i<400; i++){
       d.setDate(d.getDate()+1);
       const dStr = fmtDate(d);
-      const hasAny = activities.some(a=>activityOnDay(a, dStr) && activityVisible(a));
+      const hasAny = activities.some(a=>activityOnDay(a, dStr) && browseVisible(a));
       if(hasAny){
         selectedDateStr = dStr;
         viewDate = new Date(dStr + 'T00:00:00');
@@ -1949,6 +1973,11 @@
     }catch(e){
       prompt('Copy this link:', url);
     }
+  });
+
+  document.getElementById('hideCancelledToggle').addEventListener('change', (e)=>{
+    hideCancelled = e.target.checked;
+    render();
   });
 
   // Init
