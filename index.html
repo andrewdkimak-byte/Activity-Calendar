@@ -619,6 +619,16 @@
       </div>
     </div>
 
+    <div class="card" id="statsCard" style="display:none;">
+      <h2>Stats</h2>
+      <select id="statsPeriod" class="sort-select" style="width:100%; margin-bottom:10px;">
+        <option value="month">This Month</option>
+        <option value="quarter">This Quarter</option>
+        <option value="year">This Year</option>
+      </select>
+      <div id="statsBody" style="font-size:12px;"></div>
+    </div>
+
     <div class="card">
       <h2>Filter by site</h2>
       <div class="filters" id="filters"></div>
@@ -708,6 +718,14 @@
         <optgroup label="PP Review">
           <option>Progress Payment Review</option>
         </optgroup>
+      </select>
+    </div>
+    <div class="field">
+      <label>Status</label>
+      <select id="fStatus">
+        <option value="confirmed">Confirmed</option>
+        <option value="tentative">Tentative</option>
+        <option value="cancelled">Cancelled</option>
       </select>
     </div>
     <div class="field">
@@ -855,6 +873,7 @@
       location: a.location || '',
       activityId: a.activityId || '',
       ppType: a.ppType || '',
+      status: a.status || 'confirmed',
       capacityFilled: a.capacityFilled != null ? a.capacityFilled : '',
       capacityTotal: a.capacityTotal != null ? a.capacityTotal : '',
       notes: a.notes || ''
@@ -1196,6 +1215,7 @@
         <button class="a-edit" title="Edit" data-id="${a.id}">&#9998;</button>
         <button class="a-dup" title="Duplicate" data-id="${a.id}">&#128203;</button>` : ''}
         <div class="a-title">${escapeHtml(a.title)}${a.activityId ? `<span class="a-id">ID ${escapeHtml(a.activityId)}</span>` : ''}</div>
+        ${a.status && a.status !== 'confirmed' ? `<div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:${a.status==='cancelled' ? '#B5443B' : '#C9772E'}; margin-bottom:2px;">${a.status === 'cancelled' ? 'Cancelled' : 'Tentative'}</div>` : ''}
         ${a.ppType ? `<div style="font-style:italic; font-size:11px; color:var(--ink-soft); margin-bottom:2px;">${escapeHtml(shortPpTypeLabel(a.ppType))}</div>` : ''}
         <div class="a-meta">${siteNames} · ${dayLabel}${timeLabel ? ' · '+timeLabel : ''}</div>
         ${capLine ? `<div class="a-notes">${escapeHtml(capLine)}</div>` : ''}
@@ -1267,6 +1287,7 @@
 
     document.getElementById('detailModalTitle').textContent = a.title;
     let rows = '';
+    if(a.status && a.status !== 'confirmed') rows += `<div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:${a.status==='cancelled' ? '#B5443B' : '#C9772E'}; margin-bottom:4px;">${a.status === 'cancelled' ? 'Cancelled' : 'Tentative'}</div>`;
     if(a.ppType) rows += `<div style="font-style:italic; color:var(--ink-soft); margin-bottom:8px;">${escapeHtml(a.ppType)}</div>`;
     rows += `<div><strong>Site${a.sites.length>1?'s':''}:</strong> ${escapeHtml(siteNames)}</div>`;
     rows += `<div><strong>Day:</strong> ${escapeHtml(dayLabel)}</div>`;
@@ -1298,7 +1319,9 @@
     const dayLabel = formatDateRangeLabel(a.startDate, a.endDate);
     const timeLabel = formatTimeRangeLabel(a.time, a.endTime);
 
-    let text = `${a.title}\n${siteNames}\n${dayLabel}`;
+    let text = a.status && a.status !== 'confirmed'
+      ? `${a.title} — ${a.status.toUpperCase()}\n${siteNames}\n${dayLabel}`
+      : `${a.title}\n${siteNames}\n${dayLabel}`;
     if(a.ppType) text += `\n${mediumPpTypeLabel(a.ppType)}`;
     if(timeLabel) text += `\n${timeLabel}`;
     if(a.location) text += `\n${a.location}`;
@@ -1320,6 +1343,9 @@
   });
 
   async function deleteActivity(id){
+    const target = activities.find(a=>a.id===id);
+    const label = target ? target.title : 'this activity';
+    if(!confirm(`Delete "${label}"? This can't be undone.`)) return;
     activities = activities.filter(a=>a.id!==id);
     await saveActivities();
     render();
@@ -1367,10 +1393,44 @@
     }
   }
 
+  function getPeriodRange(period, refDate){
+    const d = new Date(refDate);
+    if(period === 'quarter'){
+      const q = Math.floor(d.getMonth() / 3);
+      return { start: fmtDate(new Date(d.getFullYear(), q*3, 1)), end: fmtDate(new Date(d.getFullYear(), q*3+3, 0)) };
+    }
+    if(period === 'year'){
+      return { start: fmtDate(new Date(d.getFullYear(), 0, 1)), end: fmtDate(new Date(d.getFullYear(), 11, 31)) };
+    }
+    return { start: fmtDate(new Date(d.getFullYear(), d.getMonth(), 1)), end: fmtDate(new Date(d.getFullYear(), d.getMonth()+1, 0)) };
+  }
+
+  function renderStats(){
+    const body = document.getElementById('statsBody');
+    const periodEl = document.getElementById('statsPeriod');
+    if(!body || !periodEl) return;
+    const { start, end } = getPeriodRange(periodEl.value, viewDate);
+    const inRange = activities.filter(a => a.startDate <= end && a.endDate >= start);
+
+    const orderedSiteIds = ['brookvale','chatswood','hornsby','ryde'];
+    let html = `<div style="font-weight:700; margin-bottom:8px;">${inRange.length} activities</div>`;
+    orderedSiteIds.forEach(id=>{
+      const site = siteById(id);
+      const count = inRange.filter(a=>a.sites.includes(id)).length;
+      html += `<div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+        <span><span class="swatch" style="background:${site.hex}; display:inline-block; margin-right:6px;"></span>${site.name}</span>
+        <span>${count}</span>
+      </div>`;
+    });
+    body.innerHTML = html;
+  }
+  document.getElementById('statsPeriod').addEventListener('change', renderStats);
+
   function render(){
     buildGrid();
     renderDetail();
     renderTwoWeek();
+    renderStats();
   }
 
   // Nav
@@ -1445,6 +1505,7 @@
       document.getElementById('fLocation').value = activityToEdit.location || '';
       document.getElementById('fActivityId').value = activityToEdit.activityId || '';
       document.getElementById('fPpType').value = activityToEdit.ppType || '';
+      document.getElementById('fStatus').value = activityToEdit.status || 'confirmed';
       document.getElementById('fCapacityFilled').value = activityToEdit.capacityFilled || '';
       document.getElementById('fCapacityTotal').value = activityToEdit.capacityTotal || '';
       document.getElementById('fNotes').value = activityToEdit.notes || '';
@@ -1460,6 +1521,7 @@
       document.getElementById('fLocation').value = '';
       document.getElementById('fActivityId').value = '';
       document.getElementById('fPpType').value = '';
+      document.getElementById('fStatus').value = 'confirmed';
       document.getElementById('fCapacityFilled').value = '';
       document.getElementById('fCapacityTotal').value = '';
       document.getElementById('fNotes').value = '';
@@ -1515,6 +1577,7 @@
     document.getElementById('fLocation').value = a.location || '';
     document.getElementById('fActivityId').value = a.activityId || '';
     document.getElementById('fPpType').value = a.ppType || '';
+    document.getElementById('fStatus').value = a.status || 'confirmed';
     document.getElementById('fCapacityFilled').value = a.capacityFilled || '';
     document.getElementById('fCapacityTotal').value = a.capacityTotal || '';
     document.getElementById('fNotes').value = a.notes || '';
@@ -1535,6 +1598,7 @@
     const location = document.getElementById('fLocation').value.trim();
     const activityId = document.getElementById('fActivityId').value.trim();
     const ppType = document.getElementById('fPpType').value;
+    const status = document.getElementById('fStatus').value;
     const capacityFilled = document.getElementById('fCapacityFilled').value.trim();
     const capacityTotal = document.getElementById('fCapacityTotal').value.trim();
     const notes = document.getElementById('fNotes').value.trim();
@@ -1578,12 +1642,12 @@
     if(editingId){
       const idx = activities.findIndex(a=>a.id===editingId);
       if(idx>-1){
-        activities[idx] = { ...activities[idx], title, sites:sitesArr, startDate, endDate, time, endTime, location, activityId, ppType, capacityFilled, capacityTotal, notes };
+        activities[idx] = { ...activities[idx], title, sites:sitesArr, startDate, endDate, time, endTime, location, activityId, ppType, status, capacityFilled, capacityTotal, notes };
       }
     }else{
       activities.push({
         id: 'a_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-        title, sites:sitesArr, startDate, endDate, time, endTime, location, activityId, ppType, capacityFilled, capacityTotal, notes
+        title, sites:sitesArr, startDate, endDate, time, endTime, location, activityId, ppType, status, capacityFilled, capacityTotal, notes
       });
     }
 
@@ -1940,6 +2004,7 @@
         signedInWidget.style.display = 'none';
       }
       document.getElementById('editorStatusWidget').style.display = isEditor ? 'flex' : 'none';
+      document.getElementById('statsCard').style.display = isEditor ? 'block' : 'none';
       updateSyncStatus(currentSyncState);
       render();
     });
