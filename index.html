@@ -726,6 +726,10 @@
         <option value="cancelled">Cancelled</option>
       </select>
     </div>
+    <div class="field" id="cancelReasonField" style="display:none;">
+      <label>Reason for cancellation (optional)</label>
+      <input id="fCancelReason" type="text" placeholder="e.g. Trainer unavailable">
+    </div>
     <div class="field">
       <label>Site (select one or more)</label>
       <div class="site-options" id="siteOptions"></div>
@@ -890,6 +894,7 @@
       activityId: a.activityId || '',
       ppType: a.ppType || '',
       status: a.status || 'confirmed',
+      cancelReason: a.cancelReason || '',
       capacityFilled: a.capacityFilled != null ? a.capacityFilled : '',
       capacityTotal: a.capacityTotal != null ? a.capacityTotal : '',
       notes: a.notes || ''
@@ -1129,7 +1134,13 @@
           tip.className='site-tooltip';
           let tipHtml = `<span class="st-site">${escapeHtml(s.name)}</span>`;
           siteActs.forEach(a=>{
-            tipHtml += `${escapeHtml(a.title)}${a.activityId ? ' — ID '+escapeHtml(a.activityId) : ''}<br>`;
+            let tipLine = `${escapeHtml(a.title)}${a.activityId ? ' — ID '+escapeHtml(a.activityId) : ''}`;
+            if(a.status === 'cancelled'){
+              tipLine += ` — CANCELLED${a.cancelReason ? ': '+escapeHtml(a.cancelReason) : ''}`;
+            }else if(a.status === 'tentative'){
+              tipLine += ' — TENTATIVE';
+            }
+            tipHtml += tipLine + '<br>';
           });
           tip.innerHTML = tipHtml;
           row.appendChild(tip);
@@ -1241,7 +1252,7 @@
       const capLine = locationCapacityLine(a);
       item.innerHTML = `
         <div class="a-title">${escapeHtml(a.title)}${a.activityId ? `<span class="a-id">ID ${escapeHtml(a.activityId)}</span>` : ''}</div>
-        ${a.status && a.status !== 'confirmed' ? `<div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:${a.status==='cancelled' ? '#B5443B' : '#C9772E'}; margin-bottom:2px;">${a.status === 'cancelled' ? 'Cancelled' : 'Tentative'}</div>` : ''}
+        ${a.status && a.status !== 'confirmed' ? `<div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:${a.status==='cancelled' ? '#B5443B' : '#C9772E'}; margin-bottom:2px;">${a.status === 'cancelled' ? 'Cancelled' + (a.cancelReason ? ': '+escapeHtml(a.cancelReason) : '') : 'Tentative'}</div>` : ''}
         ${a.ppType ? `<div style="font-style:italic; font-size:11px; color:var(--ink-soft); margin-bottom:2px;">${escapeHtml(shortPpTypeLabel(a.ppType))}</div>` : ''}
         <div class="a-meta">${siteNames} · ${dayLabel}${timeLabel ? ' · '+timeLabel : ''}</div>
         ${capLine ? `<div class="a-notes">${escapeHtml(capLine)}</div>` : ''}
@@ -1301,7 +1312,7 @@
 
     document.getElementById('detailModalTitle').textContent = a.title;
     let rows = '';
-    if(a.status && a.status !== 'confirmed') rows += `<div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:${a.status==='cancelled' ? '#B5443B' : '#C9772E'}; margin-bottom:4px;">${a.status === 'cancelled' ? 'Cancelled' : 'Tentative'}</div>`;
+    if(a.status && a.status !== 'confirmed') rows += `<div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:${a.status==='cancelled' ? '#B5443B' : '#C9772E'}; margin-bottom:4px;">${a.status === 'cancelled' ? 'Cancelled' + (a.cancelReason ? ': '+escapeHtml(a.cancelReason) : '') : 'Tentative'}</div>`;
     if(a.ppType) rows += `<div style="font-style:italic; color:var(--ink-soft); margin-bottom:8px;">${escapeHtml(a.ppType)}</div>`;
     rows += `<div><strong>Site${a.sites.length>1?'s':''}:</strong> ${escapeHtml(siteNames)}</div>`;
     rows += `<div><strong>Day:</strong> ${escapeHtml(dayLabel)}</div>`;
@@ -1334,7 +1345,7 @@
     const timeLabel = formatTimeRangeLabel(a.time, a.endTime);
 
     let text = a.status && a.status !== 'confirmed'
-      ? `${a.title} — ${a.status.toUpperCase()}\n${siteNames}\n${dayLabel}`
+      ? `${a.title} — ${a.status.toUpperCase()}${a.status==='cancelled' && a.cancelReason ? ' ('+a.cancelReason+')' : ''}\n${siteNames}\n${dayLabel}`
       : `${a.title}\n${siteNames}\n${dayLabel}`;
     if(a.ppType) text += `\n${mediumPpTypeLabel(a.ppType)}`;
     if(timeLabel) text += `\n${timeLabel}`;
@@ -1496,6 +1507,12 @@
     });
   }
 
+  function updateCancelReasonVisibility(){
+    const field = document.getElementById('cancelReasonField');
+    if(field) field.style.display = document.getElementById('fStatus').value === 'cancelled' ? 'block' : 'none';
+  }
+  document.getElementById('fStatus').addEventListener('change', updateCancelReasonVisibility);
+
   const activityIdInput = document.getElementById('fActivityId');
   activityIdInput.addEventListener('input', (e)=>{
     e.target.value = e.target.value.replace(/[^0-9]/g, '');
@@ -1521,6 +1538,8 @@
       document.getElementById('fActivityId').value = activityToEdit.activityId || '';
       document.getElementById('fPpType').value = activityToEdit.ppType || '';
       document.getElementById('fStatus').value = activityToEdit.status || 'confirmed';
+      document.getElementById('fCancelReason').value = activityToEdit.cancelReason || '';
+      updateCancelReasonVisibility();
       document.getElementById('fCapacityFilled').value = activityToEdit.capacityFilled || '';
       document.getElementById('fCapacityTotal').value = activityToEdit.capacityTotal || '';
       document.getElementById('fNotes').value = activityToEdit.notes || '';
@@ -1537,6 +1556,8 @@
       document.getElementById('fActivityId').value = '';
       document.getElementById('fPpType').value = '';
       document.getElementById('fStatus').value = 'confirmed';
+      document.getElementById('fCancelReason').value = '';
+      updateCancelReasonVisibility();
       document.getElementById('fCapacityFilled').value = '';
       document.getElementById('fCapacityTotal').value = '';
       document.getElementById('fNotes').value = '';
@@ -1593,6 +1614,8 @@
     document.getElementById('fActivityId').value = a.activityId || '';
     document.getElementById('fPpType').value = a.ppType || '';
     document.getElementById('fStatus').value = a.status || 'confirmed';
+    document.getElementById('fCancelReason').value = a.cancelReason || '';
+    updateCancelReasonVisibility();
     document.getElementById('fCapacityFilled').value = a.capacityFilled || '';
     document.getElementById('fCapacityTotal').value = a.capacityTotal || '';
     document.getElementById('fNotes').value = a.notes || '';
@@ -1614,6 +1637,7 @@
     const activityId = document.getElementById('fActivityId').value.trim();
     const ppType = document.getElementById('fPpType').value;
     const status = document.getElementById('fStatus').value;
+    const cancelReason = document.getElementById('fCancelReason').value.trim();
     const capacityFilled = document.getElementById('fCapacityFilled').value.trim();
     const capacityTotal = document.getElementById('fCapacityTotal').value.trim();
     const notes = document.getElementById('fNotes').value.trim();
@@ -1657,12 +1681,12 @@
     if(editingId){
       const idx = activities.findIndex(a=>a.id===editingId);
       if(idx>-1){
-        activities[idx] = { ...activities[idx], title, sites:sitesArr, startDate, endDate, time, endTime, location, activityId, ppType, status, capacityFilled, capacityTotal, notes };
+        activities[idx] = { ...activities[idx], title, sites:sitesArr, startDate, endDate, time, endTime, location, activityId, ppType, status, cancelReason, capacityFilled, capacityTotal, notes };
       }
     }else{
       activities.push({
         id: 'a_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-        title, sites:sitesArr, startDate, endDate, time, endTime, location, activityId, ppType, status, capacityFilled, capacityTotal, notes
+        title, sites:sitesArr, startDate, endDate, time, endTime, location, activityId, ppType, status, cancelReason, capacityFilled, capacityTotal, notes
       });
     }
 
