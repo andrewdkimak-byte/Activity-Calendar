@@ -510,6 +510,20 @@
   .site-tooltip .st-site{font-weight:700; margin-bottom:2px; display:block;}
   .site-row.filled:hover .site-tooltip{display:block;}
 
+  #detailOverlay{
+    background:transparent;
+    justify-content:flex-end;
+    align-items:flex-start;
+    padding:76px 24px 24px 0;
+    pointer-events:none;
+  }
+  #detailOverlay .modal{
+    pointer-events:auto;
+    max-width:320px;
+    border:1px solid var(--line-strong);
+    box-shadow:0 12px 36px rgba(0,0,0,0.2);
+  }
+
   .activity-item .a-edit{
     position:absolute; top:6px; right:26px;
     border:none; background:none; cursor:pointer;
@@ -524,6 +538,14 @@
     padding:2px;
   }
   .activity-item .a-dup:hover{color:var(--ink);}
+  .ctx-item{
+    display:block; width:100%; text-align:left;
+    padding:9px 14px; border:none; background:#fff;
+    cursor:pointer; font-size:inherit; color:var(--ink);
+    border-bottom:1px solid var(--line);
+  }
+  .ctx-item:last-child{border-bottom:none;}
+  .ctx-item:hover{background:var(--paper);}
   .activity-item .a-id{
     display:inline-block;
     font-size:10px;
@@ -600,6 +622,7 @@
     <div class="card">
       <h2>Filter by site</h2>
       <div class="filters" id="filters"></div>
+      <button class="export-btn" id="copyFilterLinkBtn" style="width:100%; margin-top:10px;">Copy link for this view</button>
     </div>
 
     <div class="card day-detail" id="dayDetail">
@@ -741,6 +764,12 @@
     </div>
     <div class="status-msg" id="statusMsg"></div>
   </div>
+</div>
+
+<div id="contextMenu" style="display:none; position:fixed; background:#fff; border:1px solid var(--line-strong); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.16); z-index:100; overflow:hidden; min-width:130px; font-size:12.5px;">
+  <button class="ctx-item" data-action="edit">Edit</button>
+  <button class="ctx-item" data-action="duplicate">Duplicate</button>
+  <button class="ctx-item" data-action="delete" style="color:#B5443B;">Delete</button>
 </div>
 
 <div class="overlay" id="detailOverlay">
@@ -1076,8 +1105,48 @@
         render();
       });
 
+      if(isEditor){
+        cell.addEventListener('dragover', (e)=>{
+          e.preventDefault();
+          cell.style.outline = '2px solid var(--ink)';
+        });
+        cell.addEventListener('dragleave', ()=>{
+          cell.style.outline = '';
+        });
+        cell.addEventListener('drop', (e)=>{
+          e.preventDefault();
+          cell.style.outline = '';
+          const activityId = e.dataTransfer.getData('text/plain');
+          if(activityId) moveActivityToDate(activityId, dStr);
+        });
+      }
+
       grid.appendChild(cell);
     }
+  }
+
+  function moveActivityToDate(activityId, newStartDate){
+    const idx = activities.findIndex(a=>a.id===activityId);
+    if(idx===-1) return;
+    const a = activities[idx];
+    const durationDays = Math.round((new Date(a.endDate+'T00:00:00') - new Date(a.startDate+'T00:00:00')) / 86400000);
+    const newStart = new Date(newStartDate+'T00:00:00');
+    const newEnd = new Date(newStart);
+    newEnd.setDate(newEnd.getDate() + durationDays);
+    const newStartStr = fmtDate(newStart);
+    const newEndStr = fmtDate(newEnd);
+
+    const conflicts = findConflicts(a.sites, newStartStr, newEndStr, a.time, a.id);
+    if(conflicts.length > 0){
+      const names = conflicts.map(c=>c.title).join(', ');
+      if(!confirm(`This may double-book with: ${names}. Move anyway?`)) return;
+    }
+
+    activities[idx] = { ...a, startDate:newStartStr, endDate:newEndStr };
+    saveActivities();
+    selectedDateStr = newStartStr;
+    viewDate = new Date(newStartStr + 'T00:00:00');
+    render();
   }
 
   function renderDetail(){
@@ -1112,6 +1181,12 @@
       item.style.borderLeftColor = primary ? primary.hex : '#999';
       item.style.cursor = 'pointer';
       item.dataset.id = a.id;
+      if(isEditor){
+        item.draggable = true;
+        item.addEventListener('dragstart', (e)=>{
+          e.dataTransfer.setData('text/plain', a.id);
+        });
+      }
       const siteNames = visibleSites.map(s=>s.name).join(', ');
       const dayLabel = formatDateRangeLabel(a.startDate, a.endDate);
       const timeLabel = formatTimeRangeLabel(a.time, a.endTime);
@@ -1128,6 +1203,11 @@
       `;
       item.addEventListener('click', ()=> showActivityDetail(a));
       if(isEditor){
+        item.addEventListener('contextmenu', (e)=>{
+          e.preventDefault();
+          e.stopPropagation();
+          showContextMenu(e.clientX, e.clientY, a);
+        });
         item.querySelector('.a-del').addEventListener('click', (e)=>{
           e.stopPropagation();
           deleteActivity(a.id);
@@ -1396,6 +1476,33 @@
   function closeModal(){
     overlay.classList.remove('show');
   }
+
+  // Right-click context menu (editors only)
+  const contextMenu = document.getElementById('contextMenu');
+  let contextMenuActivity = null;
+
+  function showContextMenu(x, y, activity){
+    contextMenuActivity = activity;
+    contextMenu.style.left = Math.min(x, window.innerWidth - 150) + 'px';
+    contextMenu.style.top = Math.min(y, window.innerHeight - 120) + 'px';
+    contextMenu.style.display = 'block';
+  }
+  function hideContextMenu(){
+    contextMenu.style.display = 'none';
+    contextMenuActivity = null;
+  }
+  document.addEventListener('click', hideContextMenu);
+  contextMenu.querySelectorAll('.ctx-item').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(!contextMenuActivity) return;
+      const action = btn.dataset.action;
+      if(action === 'edit') openModal(contextMenuActivity);
+      if(action === 'duplicate') duplicateActivity(contextMenuActivity);
+      if(action === 'delete') deleteActivity(contextMenuActivity.id);
+      hideContextMenu();
+    });
+  });
 
   function duplicateActivity(a){
     openModal(null);
@@ -1784,7 +1891,32 @@
     }catch(e){ /* seeding is best-effort */ }
   }
 
+  function applyUrlFilters(){
+    const params = new URLSearchParams(window.location.search);
+    const siteParam = params.get('site');
+    if(!siteParam) return;
+    const requested = siteParam.split(',')
+      .map(s=>s.trim().toLowerCase())
+      .filter(s=>SITES.some(site=>site.id===s));
+    if(requested.length>0){
+      activeFilters = new Set(requested);
+    }
+  }
+
+  document.getElementById('copyFilterLinkBtn').addEventListener('click', async ()=>{
+    const params = new URLSearchParams();
+    params.set('site', Array.from(activeFilters).join(','));
+    const url = window.location.origin + window.location.pathname + '?' + params.toString();
+    try{
+      await navigator.clipboard.writeText(url);
+      alert('Link copied to clipboard:\n' + url);
+    }catch(e){
+      prompt('Copy this link:', url);
+    }
+  });
+
   // Init
+  applyUrlFilters();
   buildFilters();
   startRealtimeSync();
 
