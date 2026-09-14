@@ -31,6 +31,25 @@
     font-family: -apple-system, "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
     -webkit-font-smoothing:antialiased;
   }
+  body.theme-dark{
+    --paper:#1B1D1F;
+    --panel:#242628;
+    --ink:#EDEDEC;
+    --ink-soft:#A8ACB0;
+    --line:#33363A;
+    --line-strong:#45484D;
+    --today-ring:#EDEDEC;
+  }
+  body.high-contrast{ --line-strong:#000; }
+  body.high-contrast .day, body.high-contrast .activity-item, body.high-contrast .card{ border-width:2px; }
+  body.theme-dark.high-contrast{ --line-strong:#fff; }
+  body.reduce-motion .activity-item.flash{ animation:none !important; }
+  body.reduce-motion *{ transition:none !important; }
+  body.density-compact .card{ padding:8px; }
+  body.density-compact .day{ padding:3px 3px 4px; }
+  #appRoot.text-large{ zoom:1.18; }
+  #appRoot.text-small{ zoom:0.92; }
+  .site-letter{ font-size:9px; font-weight:800; margin-right:4px; }
   .app{
     display:grid;
     grid-template-columns: 1fr 320px 320px;
@@ -47,6 +66,8 @@
     .app{grid-template-columns:1fr;}
     .sidebar-secondary{grid-column: 1;}
   }
+  .app.viewer-mode{ grid-template-columns: 1fr 320px; }
+  .app.viewer-mode .sidebar-secondary{ grid-column: 2; }
 
   /* Header */
   .brand{
@@ -550,12 +571,13 @@
 </head>
 <body>
 
-<div class="app">
+<div class="app viewer-mode" id="appRoot">
   <div class="brand">
     <div>
       <h1>Activity Calendar</h1>
       <div class="sub">Ryde · Hornsby · Chatswood · Brookvale</div>
       <button id="helpToggleBtn" style="background:none; border:none; color:var(--ink-soft); font-size:11px; text-decoration:underline; cursor:pointer; padding:0; margin-top:4px;">How this works</button>
+      <button id="settingsToggleBtn" style="display:none; background:none; border:none; color:var(--ink-soft); font-size:11px; text-decoration:underline; cursor:pointer; padding:0; margin-top:4px; margin-left:12px;">⚙ Settings</button>
       <div id="authWidget" style="margin-top:8px; font-size:12px;">
         <button id="signInBtn" class="today-btn" style="text-transform:none;">Sign in to edit</button>
         <div id="signInForm" style="display:none; margin-top:6px; gap:6px; align-items:center;">
@@ -594,9 +616,7 @@
       <div class="search-results" id="searchResults"></div>
     </div>
 
-    <div class="weekday-row">
-      <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
-    </div>
+    <div class="weekday-row" id="weekdayRow"></div>
     <div class="grid" id="grid"></div>
   </div>
 
@@ -792,6 +812,84 @@
   <button class="ctx-item" data-action="delete" style="color:#B5443B;">Delete</button>
 </div>
 
+<div class="overlay" id="settingsOverlay">
+  <div class="modal" style="max-width:420px; max-height:85vh; overflow-y:auto;">
+    <h3>Settings</h3>
+
+    <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:700; margin:14px 0 8px;">Appearance</div>
+    <label class="filter-row"><input type="checkbox" id="setTheme"><span>Night mode</span></label>
+    <label class="filter-row"><input type="checkbox" id="setHighContrast"><span>High contrast</span></label>
+    <label class="filter-row"><input type="checkbox" id="setColorblind"><span>Show site letters (colour-blind friendly)</span></label>
+    <label class="filter-row"><input type="checkbox" id="setReduceMotion"><span>Reduce motion</span></label>
+    <label class="filter-row"><input type="checkbox" id="setDensity"><span>Compact spacing</span></label>
+    <div class="field" style="margin-top:8px;">
+      <label>Text size</label>
+      <select id="setTextSize">
+        <option value="small">Small</option>
+        <option value="medium">Medium</option>
+        <option value="large">Large</option>
+      </select>
+    </div>
+
+    <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:700; margin:18px 0 8px;">Behaviour</div>
+    <div class="field">
+      <label>Week starts on</label>
+      <select id="setWeekStart">
+        <option value="monday">Monday</option>
+        <option value="sunday">Sunday</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Time format</label>
+      <select id="setTimeFormat">
+        <option value="12">12-hour (2:00pm)</option>
+        <option value="24">24-hour (14:00)</option>
+      </select>
+    </div>
+    <label class="filter-row"><input type="checkbox" id="setRememberSort"><span>Remember my last sort choice</span></label>
+    <label class="filter-row"><input type="checkbox" id="setConfirmUnsaved"><span>Warn me before losing unsaved changes</span></label>
+    <div class="field">
+      <label>Default site for new activities</label>
+      <select id="setPrefillSite">
+        <option value="">No default</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Always start filtered to</label>
+      <select id="setDefaultFilter">
+        <option value="">All sites</option>
+      </select>
+      <button class="export-btn" id="saveDefaultFilterBtn" style="width:100%; margin-top:6px;">Use my current site filter instead</button>
+    </div>
+
+    <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:700; margin:18px 0 8px;">Site-wide (affects everyone)</div>
+    <div id="manageSitesBody"></div>
+    <button class="export-btn" id="saveManageSitesBtn" style="width:100%; margin-top:6px;">Save site names &amp; colours</button>
+
+    <label class="filter-row" style="margin-top:12px;"><input type="checkbox" id="setStatsForViewers"><span>Let viewers see the Stats card too</span></label>
+
+    <div class="field" style="margin-top:8px;">
+      <label>Hide activities older than (months, blank = never)</label>
+      <input id="setAutoArchive" type="number" min="0" placeholder="e.g. 6">
+    </div>
+
+    <div class="field">
+      <label>Firestore rule expiry reminder (date)</label>
+      <input id="setRuleExpiry" type="date">
+      <div id="ruleExpiryWarning" style="font-size:11px; color:#B5443B; margin-top:4px;"></div>
+    </div>
+
+    <button class="export-btn" id="saveSiteWideBtn" style="width:100%; margin-top:6px;">Save site-wide settings</button>
+
+    <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:700; margin:18px 0 8px;">About</div>
+    <div style="font-size:12px; color:var(--ink-soft);">Activity Calendar — build 14 Sept 2026</div>
+
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-cancel" id="settingsCloseBtn" style="flex:1;">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="helpOverlay">
   <div class="modal">
     <h3>How this works</h3>
@@ -858,14 +956,60 @@
     {id:'chatswood', name:'Chatswood', color:'var(--chatswood)', hex:'#8A4FA6'},
     {id:'brookvale', name:'Brookvale', color:'var(--brookvale)', hex:'#C9772E'}
   ];
+  const SITE_LETTERS = {ryde:'R', hornsby:'H', chatswood:'C', brookvale:'B'};
+
+  const PREFS_KEY = 'wiseCalPrefs';
+  const defaultPrefs = {
+    theme:'light', textSize:'medium', highContrast:false, colorblind:false,
+    reduceMotion:false, density:'comfortable', weekStart:'monday',
+    timeFormat:'12', rememberSort:false, lastSortMode:'time',
+    confirmUnsaved:true, prefillSite:'', defaultFilter:null
+  };
+  let prefs = Object.assign({}, defaultPrefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'));
+  function savePrefs(){ localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); }
+
+  function swatchHtml(site){
+    return `<span class="swatch" style="background:${site.hex}"></span>${prefs.colorblind ? `<span class="site-letter">${SITE_LETTERS[site.id]}</span>` : ''}`;
+  }
+
+  function applyPrefsToDom(){
+    const body = document.body;
+    body.classList.toggle('theme-dark', prefs.theme === 'dark');
+    body.classList.toggle('high-contrast', prefs.highContrast);
+    body.classList.toggle('reduce-motion', prefs.reduceMotion);
+    body.classList.toggle('density-compact', prefs.density === 'compact');
+    const appRoot = document.getElementById('appRoot');
+    appRoot.classList.remove('text-small','text-large');
+    if(prefs.textSize === 'small') appRoot.classList.add('text-small');
+    if(prefs.textSize === 'large') appRoot.classList.add('text-large');
+  }
 
   let activities = [];
   let activeFilters = new Set(SITES.map(s=>s.id));
   let viewDate = new Date();
   let selectedDateStr = fmtDate(new Date());
   let editingId = null;
+  let modalSnapshot = null;
+  function captureModalSnapshot(){
+    return JSON.stringify({
+      title: document.getElementById('fTitle').value,
+      ppType: document.getElementById('fPpType').value,
+      status: document.getElementById('fStatus').value,
+      cancelReason: document.getElementById('fCancelReason').value,
+      dateStart: document.getElementById('fDateStart').value,
+      dateEnd: document.getElementById('fDateEnd').value,
+      timeStart: document.getElementById('fTimeStart').value,
+      timeEnd: document.getElementById('fTimeEnd').value,
+      location: document.getElementById('fLocation').value,
+      activityId: document.getElementById('fActivityId').value,
+      capacityFilled: document.getElementById('fCapacityFilled').value,
+      capacityTotal: document.getElementById('fCapacityTotal').value,
+      notes: document.getElementById('fNotes').value,
+      sites: Array.from(modalSites).sort().join(',')
+    });
+  }
   let storageOK = true;
-  let sortMode = 'time';
+  let sortMode = prefs.rememberSort ? prefs.lastSortMode : 'time';
   let flashId = null;
 
   function fmtDate(d){
@@ -915,6 +1059,9 @@
   function formatTime12(t){
     if(!t) return '';
     const [h,m] = t.split(':').map(Number);
+    if(prefs.timeFormat === '24'){
+      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    }
     const period = h >= 12 ? 'pm' : 'am';
     let hour12 = h % 12; if(hour12 === 0) hour12 = 12;
     return `${hour12}:${String(m).padStart(2,'0')}${period}`;
@@ -972,8 +1119,16 @@
   }
 
   let hideCancelled = true;
+  let siteSettings = { statsForViewers:false, autoArchiveMonths:null, ruleExpiry:'', siteMeta:{} };
+
+  function isArchived(a){
+    if(!siteSettings.autoArchiveMonths) return false;
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - Number(siteSettings.autoArchiveMonths));
+    return new Date(a.endDate + 'T00:00:00') < cutoff;
+  }
   function browseVisible(a){
-    return activityVisible(a) && !(hideCancelled && a.status === 'cancelled');
+    return activityVisible(a) && !(hideCancelled && a.status === 'cancelled') && !isArchived(a);
   }
   function updateHiddenCancelledCount(){
     const el = document.getElementById('hiddenCancelledCount');
@@ -1034,6 +1189,18 @@
     docRef.onSnapshot((snap)=>{
       const data = snap.exists ? snap.data() : {};
       activities = (data.activities || []).map(normalizeActivity);
+      if(data.settings){
+        siteSettings = Object.assign({ statsForViewers:false, autoArchiveMonths:null, ruleExpiry:'', siteMeta:{} }, data.settings);
+        Object.keys(siteSettings.siteMeta || {}).forEach(id=>{
+          const site = siteById(id);
+          const meta = siteSettings.siteMeta[id];
+          if(site && meta){
+            if(meta.name) site.name = meta.name;
+            if(meta.hex) site.hex = meta.hex;
+          }
+        });
+      }
+      updateStatsVisibility();
       render();
       updateSyncStatus('connected');
       if(!data.seeded){
@@ -1045,6 +1212,11 @@
     });
   }
 
+  function updateStatsVisibility(){
+    const el = document.getElementById('statsCard');
+    if(el) el.style.display = (isEditor || siteSettings.statsForViewers) ? 'block' : 'none';
+  }
+
   function buildFilters(){
     const wrap = document.getElementById('filters');
     wrap.innerHTML = '';
@@ -1053,7 +1225,7 @@
       row.className = 'filter-row';
       row.innerHTML = `
         <input type="checkbox" ${activeFilters.has(s.id)?'checked':''} data-site="${s.id}">
-        <span class="swatch" style="background:${s.hex}"></span>
+        ${swatchHtml(s)}
         <span>${s.name}</span>
       `;
       row.querySelector('input').addEventListener('change', (e)=>{
@@ -1070,17 +1242,36 @@
     return d.toLocaleDateString('en-AU', {month:'long', year:'numeric'});
   }
 
+  function getWeekdayLabels(){
+    return prefs.weekStart === 'sunday'
+      ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+      : ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  }
+  function getStartOffset(firstOfMonth){
+    if(prefs.weekStart === 'sunday') return firstOfMonth.getDay();
+    let off = firstOfMonth.getDay() - 1;
+    if(off < 0) off = 6;
+    return off;
+  }
+  function isWeekendCol(i){
+    const col = i % 7;
+    return prefs.weekStart === 'sunday' ? (col === 0 || col === 6) : (col === 5 || col === 6);
+  }
+  function renderWeekdayRow(){
+    const row = document.getElementById('weekdayRow');
+    if(row) row.innerHTML = getWeekdayLabels().map(d=>`<div>${d}</div>`).join('');
+  }
+
   function buildGrid(){
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
     document.getElementById('monthLabel').textContent = monthLabel(viewDate);
+    renderWeekdayRow();
 
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
     const firstOfMonth = new Date(year, month, 1);
-    // Monday-start offset
-    let startOffset = firstOfMonth.getDay() - 1;
-    if(startOffset < 0) startOffset = 6;
+    const startOffset = getStartOffset(firstOfMonth);
 
     const gridStart = new Date(year, month, 1 - startOffset);
     const totalCells = 42;
@@ -1096,7 +1287,7 @@
       const dayActs = activities.filter(a => activityOnDay(a, dStr) && browseVisible(a));
 
       const cell = document.createElement('div');
-      const isWeekend = (i % 7 === 5 || i % 7 === 6);
+      const isWeekend = isWeekendCol(i);
       cell.className = 'day' + (isOutside?' outside':'') + (isToday?' today':'') + (isSelected?' selected':'') + (isWeekend?' weekend':'');
       cell.dataset.date = dStr;
 
@@ -1495,7 +1686,7 @@
     SITES.forEach(s=>{
       const chip = document.createElement('div');
       chip.className = 'site-chip' + (modalSites.has(s.id) ? ' active':'');
-      chip.innerHTML = `<span class="swatch" style="background:${s.hex}"></span>${s.name}`;
+      chip.innerHTML = `${swatchHtml(s)}${s.name}`;
       chip.addEventListener('click', ()=>{
         if(modalSites.has(s.id)) modalSites.delete(s.id);
         else modalSites.add(s.id);
@@ -1561,7 +1752,7 @@
       document.getElementById('fCapacityFilled').value = '';
       document.getElementById('fCapacityTotal').value = '';
       document.getElementById('fNotes').value = '';
-      modalSites = new Set([SITES[0].id]);
+      modalSites = new Set([prefs.prefillSite && SITES.some(s=>s.id===prefs.prefillSite) ? prefs.prefillSite : SITES[0].id]);
     }
     buildSiteOptions();
     conflictConfirmed = false;
@@ -1569,9 +1760,16 @@
     document.getElementById('statusMsg').textContent = '';
     overlay.classList.add('show');
     document.getElementById('fTitle').focus();
+    modalSnapshot = captureModalSnapshot();
   }
 
   function closeModal(){
+    if(prefs.confirmUnsaved && modalSnapshot !== null){
+      const current = captureModalSnapshot();
+      if(current !== modalSnapshot){
+        if(!confirm('You have unsaved changes. Close without saving?')) return;
+      }
+    }
     overlay.classList.remove('show');
   }
 
@@ -1697,6 +1895,7 @@
     if(storageOK){
       selectedDateStr = startDate;
       viewDate = new Date(startDate + 'T00:00:00');
+      modalSnapshot = null;
       closeModal();
       render();
     }else{
@@ -1772,14 +1971,13 @@
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
     const firstOfMonth = new Date(year, month, 1);
-    let startOffset = firstOfMonth.getDay() - 1;
-    if(startOffset < 0) startOffset = 6;
+    const startOffset = getStartOffset(firstOfMonth);
     const gridStart = new Date(year, month, 1 - startOffset);
 
     const activeSiteNames = SITES.filter(s=>activeFilters.has(s.id)).map(s=>s.name).join(', ');
     let html = `<h1>Activity Calendar — ${escapeHtml(monthLabel(viewDate))}</h1>`;
     html += `<div class="print-sub">Sites: ${escapeHtml(activeSiteNames || 'None')} · Generated ${new Date().toLocaleDateString('en-AU')}</div>`;
-    html += '<table class="month-print"><thead><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr></thead><tbody>';
+    html += '<table class="month-print"><thead><tr>' + getWeekdayLabels().map(d=>`<th>${d}</th>`).join('') + '</tr></thead><tbody>';
 
     for(let week=0; week<6; week++){
       html += '<tr>';
@@ -1869,6 +2067,10 @@
   // Sort control
   document.getElementById('sortSelect').addEventListener('change', (e)=>{
     sortMode = e.target.value;
+    if(prefs.rememberSort){
+      prefs.lastSortMode = sortMode;
+      savePrefs();
+    }
     renderDetail();
   });
 
@@ -2024,13 +2226,18 @@
   });
 
   // Init
+  if(prefs.defaultFilter && Array.isArray(prefs.defaultFilter) && prefs.defaultFilter.length){
+    activeFilters = new Set(prefs.defaultFilter.filter(id=>SITES.some(s=>s.id===id)));
+  }
   applyUrlFilters();
+  applyPrefsToDom();
+  document.getElementById('sortSelect').value = sortMode;
   buildFilters();
 
   const helpOverlay = document.getElementById('helpOverlay');
   document.getElementById('helpToggleBtn').addEventListener('click', ()=>{
     document.getElementById('helpLegend').innerHTML = SITES.map(s=>
-      `<div style="display:flex; align-items:center; gap:7px; margin-bottom:4px;"><span class="swatch" style="background:${s.hex};"></span>${s.name}</div>`
+      `<div style="display:flex; align-items:center; gap:7px; margin-bottom:4px;">${swatchHtml(s)}${s.name}</div>`
     ).join('');
     helpOverlay.classList.add('show');
   });
@@ -2040,6 +2247,163 @@
   helpOverlay.addEventListener('click', (e)=>{
     if(e.target===helpOverlay) helpOverlay.classList.remove('show');
   });
+
+  // Settings panel
+  const settingsOverlay = document.getElementById('settingsOverlay');
+
+  function populateSiteSelect(selectEl, currentValue){
+    selectEl.querySelectorAll('option[data-site]').forEach(o=>o.remove());
+    SITES.forEach(s=>{
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name;
+      opt.setAttribute('data-site','1');
+      selectEl.appendChild(opt);
+    });
+    selectEl.value = currentValue || '';
+  }
+
+  function buildManageSitesBody(){
+    const body = document.getElementById('manageSitesBody');
+    body.innerHTML = SITES.map(s=>`
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <input type="color" data-site-color="${s.id}" value="${s.hex}" style="width:32px; height:28px; border:1px solid var(--line-strong); border-radius:4px; padding:0; cursor:pointer;">
+        <input type="text" data-site-name="${s.id}" value="${s.name}" style="flex:1; padding:6px 8px; border:1px solid var(--line-strong); border-radius:6px; font-size:12px;">
+      </div>
+    `).join('');
+  }
+
+  function checkRuleExpiryWarning(){
+    const el = document.getElementById('ruleExpiryWarning');
+    if(!siteSettings.ruleExpiry){ el.textContent = ''; return; }
+    const expiry = new Date(siteSettings.ruleExpiry + 'T00:00:00');
+    const daysLeft = Math.round((expiry - new Date()) / 86400000);
+    if(daysLeft < 0) el.textContent = 'This date has already passed — check the Firestore rules now.';
+    else if(daysLeft <= 7) el.textContent = `Only ${daysLeft} day(s) left before this expires.`;
+    else el.textContent = '';
+  }
+
+  function openSettingsPanel(){
+    document.getElementById('setTheme').checked = prefs.theme === 'dark';
+    document.getElementById('setHighContrast').checked = prefs.highContrast;
+    document.getElementById('setColorblind').checked = prefs.colorblind;
+    document.getElementById('setReduceMotion').checked = prefs.reduceMotion;
+    document.getElementById('setDensity').checked = prefs.density === 'compact';
+    document.getElementById('setTextSize').value = prefs.textSize;
+    document.getElementById('setWeekStart').value = prefs.weekStart;
+    document.getElementById('setTimeFormat').value = prefs.timeFormat;
+    document.getElementById('setRememberSort').checked = prefs.rememberSort;
+    document.getElementById('setConfirmUnsaved').checked = prefs.confirmUnsaved;
+    populateSiteSelect(document.getElementById('setPrefillSite'), prefs.prefillSite);
+    populateSiteSelect(document.getElementById('setDefaultFilter'), (prefs.defaultFilter && prefs.defaultFilter[0]) || '');
+    buildManageSitesBody();
+    document.getElementById('setStatsForViewers').checked = !!siteSettings.statsForViewers;
+    document.getElementById('setAutoArchive').value = siteSettings.autoArchiveMonths || '';
+    document.getElementById('setRuleExpiry').value = siteSettings.ruleExpiry || '';
+    checkRuleExpiryWarning();
+    settingsOverlay.classList.add('show');
+  }
+
+  document.getElementById('settingsToggleBtn').addEventListener('click', openSettingsPanel);
+  document.getElementById('settingsCloseBtn').addEventListener('click', ()=>{
+    settingsOverlay.classList.remove('show');
+  });
+  settingsOverlay.addEventListener('click', (e)=>{
+    if(e.target===settingsOverlay) settingsOverlay.classList.remove('show');
+  });
+
+  // Appearance & behaviour — apply immediately and save locally
+  document.getElementById('setTheme').addEventListener('change', (e)=>{
+    prefs.theme = e.target.checked ? 'dark' : 'light';
+    savePrefs(); applyPrefsToDom();
+  });
+  document.getElementById('setHighContrast').addEventListener('change', (e)=>{
+    prefs.highContrast = e.target.checked;
+    savePrefs(); applyPrefsToDom();
+  });
+  document.getElementById('setColorblind').addEventListener('change', (e)=>{
+    prefs.colorblind = e.target.checked;
+    savePrefs(); render();
+  });
+  document.getElementById('setReduceMotion').addEventListener('change', (e)=>{
+    prefs.reduceMotion = e.target.checked;
+    savePrefs(); applyPrefsToDom();
+  });
+  document.getElementById('setDensity').addEventListener('change', (e)=>{
+    prefs.density = e.target.checked ? 'compact' : 'comfortable';
+    savePrefs(); applyPrefsToDom();
+  });
+  document.getElementById('setTextSize').addEventListener('change', (e)=>{
+    prefs.textSize = e.target.value;
+    savePrefs(); applyPrefsToDom();
+  });
+  document.getElementById('setWeekStart').addEventListener('change', (e)=>{
+    prefs.weekStart = e.target.value;
+    savePrefs(); render();
+  });
+  document.getElementById('setTimeFormat').addEventListener('change', (e)=>{
+    prefs.timeFormat = e.target.value;
+    savePrefs(); render();
+  });
+  document.getElementById('setRememberSort').addEventListener('change', (e)=>{
+    prefs.rememberSort = e.target.checked;
+    if(prefs.rememberSort) prefs.lastSortMode = sortMode;
+    savePrefs();
+  });
+  document.getElementById('setConfirmUnsaved').addEventListener('change', (e)=>{
+    prefs.confirmUnsaved = e.target.checked;
+    savePrefs();
+  });
+  document.getElementById('setPrefillSite').addEventListener('change', (e)=>{
+    prefs.prefillSite = e.target.value;
+    savePrefs();
+  });
+  document.getElementById('saveDefaultFilterBtn').addEventListener('click', ()=>{
+    prefs.defaultFilter = Array.from(activeFilters);
+    savePrefs();
+    alert('Saved — the calendar will start filtered to your current selection next time you open it.');
+  });
+
+  // Site-wide — saved to Firestore, affects everyone
+  document.getElementById('saveManageSitesBtn').addEventListener('click', async ()=>{
+    const siteMeta = {};
+    SITES.forEach(s=>{
+      const nameInput = document.querySelector(`[data-site-name="${s.id}"]`);
+      const colorInput = document.querySelector(`[data-site-color="${s.id}"]`);
+      const newName = nameInput.value.trim() || s.name;
+      const newHex = colorInput.value || s.hex;
+      s.name = newName;
+      s.hex = newHex;
+      siteMeta[s.id] = { name: newName, hex: newHex };
+    });
+    siteSettings.siteMeta = siteMeta;
+    if(!CONFIG_IS_PLACEHOLDER){
+      await docRef.set({ settings: { siteMeta } }, { merge:true });
+    }
+    render();
+    alert('Site names and colours updated for everyone.');
+  });
+
+  document.getElementById('saveSiteWideBtn').addEventListener('click', async ()=>{
+    const statsForViewers = document.getElementById('setStatsForViewers').checked;
+    const autoArchiveMonths = document.getElementById('setAutoArchive').value.trim();
+    const ruleExpiry = document.getElementById('setRuleExpiry').value;
+    siteSettings.statsForViewers = statsForViewers;
+    siteSettings.autoArchiveMonths = autoArchiveMonths ? Number(autoArchiveMonths) : null;
+    siteSettings.ruleExpiry = ruleExpiry;
+    if(!CONFIG_IS_PLACEHOLDER){
+      await docRef.set({ settings: {
+        statsForViewers,
+        autoArchiveMonths: siteSettings.autoArchiveMonths,
+        ruleExpiry
+      }}, { merge:true });
+    }
+    updateStatsVisibility();
+    checkRuleExpiryWarning();
+    render();
+    alert('Site-wide settings saved.');
+  });
+
   startRealtimeSync();
 
   // Auth
@@ -2062,7 +2426,9 @@
         signedInWidget.style.display = 'none';
       }
       document.getElementById('editorStatusWidget').style.display = isEditor ? 'flex' : 'none';
-      document.getElementById('statsCard').style.display = isEditor ? 'block' : 'none';
+      document.getElementById('appRoot').classList.toggle('viewer-mode', !isEditor);
+      document.getElementById('settingsToggleBtn').style.display = isEditor ? 'inline-block' : 'none';
+      updateStatsVisibility();
       updateSyncStatus(currentSyncState);
       render();
     });
