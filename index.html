@@ -555,6 +555,7 @@
     <div>
       <h1>Activity Calendar</h1>
       <div class="sub">Ryde · Hornsby · Chatswood · Brookvale</div>
+      <button id="helpToggleBtn" style="background:none; border:none; color:var(--ink-soft); font-size:11px; text-decoration:underline; cursor:pointer; padding:0; margin-top:4px;">How this works</button>
       <div id="authWidget" style="margin-top:8px; font-size:12px;">
         <button id="signInBtn" class="today-btn" style="text-transform:none;">Sign in to edit</button>
         <div id="signInForm" style="display:none; margin-top:6px; gap:6px; align-items:center;">
@@ -785,6 +786,24 @@
   <button class="ctx-item" data-action="edit">Edit</button>
   <button class="ctx-item" data-action="duplicate">Duplicate</button>
   <button class="ctx-item" data-action="delete" style="color:#B5443B;">Delete</button>
+</div>
+
+<div class="overlay" id="helpOverlay">
+  <div class="modal">
+    <h3>How this works</h3>
+    <div style="font-size:13px; line-height:1.7;">
+      <p style="margin-top:0;">This calendar shows what's happening, where, and when, no spreadsheets to dig through.</p>
+      <p><strong>See what's on a day:</strong> click any date on the calendar. What's happening that day shows up on the right.</p>
+      <p style="margin-bottom:6px;"><strong>Colours mean sites:</strong></p>
+      <div id="helpLegend" style="margin-bottom:12px;"></div>
+      <p><strong>Looking for something specific:</strong> type into the search box above the calendar.</p>
+      <p><strong>Only want certain sites:</strong> tick or untick them under "Filter by site."</p>
+      <p style="margin-bottom:0;"><strong>Want more detail:</strong> click on any activity to see everything about it, including time and location.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-save" id="helpCloseBtn" style="flex:1;">Got it</button>
+    </div>
+  </div>
 </div>
 
 <div class="overlay" id="detailOverlay">
@@ -1983,6 +2002,20 @@
   // Init
   applyUrlFilters();
   buildFilters();
+
+  const helpOverlay = document.getElementById('helpOverlay');
+  document.getElementById('helpToggleBtn').addEventListener('click', ()=>{
+    document.getElementById('helpLegend').innerHTML = SITES.map(s=>
+      `<div style="display:flex; align-items:center; gap:7px; margin-bottom:4px;"><span class="swatch" style="background:${s.hex};"></span>${s.name}</div>`
+    ).join('');
+    helpOverlay.classList.add('show');
+  });
+  document.getElementById('helpCloseBtn').addEventListener('click', ()=>{
+    helpOverlay.classList.remove('show');
+  });
+  helpOverlay.addEventListener('click', (e)=>{
+    if(e.target===helpOverlay) helpOverlay.classList.remove('show');
+  });
   startRealtimeSync();
 
   // Auth
