@@ -578,7 +578,7 @@
       <h1>Activity Calendar</h1>
       <div class="sub">Ryde · Hornsby · Chatswood · Brookvale</div>
       <button id="helpToggleBtn" style="background:none; border:none; color:var(--ink-soft); font-size:11px; text-decoration:underline; cursor:pointer; padding:0; margin-top:4px;">How this works</button>
-      <button id="settingsToggleBtn" style="display:none; background:none; border:none; color:var(--ink-soft); font-size:11px; text-decoration:underline; cursor:pointer; padding:0; margin-top:4px; margin-left:12px;">⚙ Settings</button>
+      <button id="settingsToggleBtn" style="background:none; border:none; color:var(--ink-soft); font-size:11px; text-decoration:underline; cursor:pointer; padding:0; margin-top:4px; margin-left:12px;">⚙ Settings</button>
       <div id="authWidget" style="margin-top:8px; font-size:12px;">
         <button id="signInBtn" class="today-btn" style="text-transform:none;">Sign in to edit</button>
         <div id="signInForm" style="display:none; margin-top:6px; gap:6px; align-items:center;">
@@ -847,45 +847,48 @@
         <option value="24">24-hour (14:00)</option>
       </select>
     </div>
-    <label class="filter-row"><input type="checkbox" id="setRememberSort"><span>Remember my last sort choice</span></label>
-    <label class="filter-row"><input type="checkbox" id="setConfirmUnsaved"><span>Warn me before losing unsaved changes</span></label>
-    <div class="field">
-      <label>Default site for new activities</label>
-      <select id="setPrefillSite">
-        <option value="">No default</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>Always start filtered to</label>
-      <select id="setDefaultFilter">
-        <option value="">All sites</option>
-      </select>
-      <button class="export-btn" id="saveDefaultFilterBtn" style="width:100%; margin-top:6px;">Use my current site filter instead</button>
-    </div>
 
-    <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:700; margin:18px 0 8px;">Site-wide (affects everyone)</div>
-    <div id="manageSitesBody"></div>
-    <button class="export-btn" id="saveManageSitesBtn" style="width:100%; margin-top:6px;">Save site names &amp; colours</button>
-    <div style="display:flex; gap:8px; align-items:center; margin-top:14px; padding-top:12px; border-top:1px solid var(--line);">
-      <input type="color" id="newSiteColor" value="#666666" style="width:32px; height:28px; border:1px solid var(--line-strong); border-radius:4px; padding:0; cursor:pointer;">
-      <input type="text" id="newSiteName" placeholder="New site name" style="flex:1; padding:6px 8px; border:1px solid var(--line-strong); border-radius:6px; font-size:12px;">
+    <div id="editorOnlySettings">
+      <label class="filter-row"><input type="checkbox" id="setRememberSort"><span>Remember my last sort choice</span></label>
+      <label class="filter-row"><input type="checkbox" id="setConfirmUnsaved"><span>Warn me before losing unsaved changes</span></label>
+      <div class="field">
+        <label>Default site for new activities</label>
+        <select id="setPrefillSite">
+          <option value="">No default</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Always start filtered to</label>
+        <select id="setDefaultFilter">
+          <option value="">All sites</option>
+        </select>
+        <button class="export-btn" id="saveDefaultFilterBtn" style="width:100%; margin-top:6px;">Use my current site filter instead</button>
+      </div>
+
+      <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:700; margin:18px 0 8px;">Site-wide (affects everyone)</div>
+      <div id="manageSitesBody"></div>
+      <button class="export-btn" id="saveManageSitesBtn" style="width:100%; margin-top:6px;">Save site names &amp; colours</button>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:14px; padding-top:12px; border-top:1px solid var(--line);">
+        <input type="color" id="newSiteColor" value="#666666" style="width:32px; height:28px; border:1px solid var(--line-strong); border-radius:4px; padding:0; cursor:pointer;">
+        <input type="text" id="newSiteName" placeholder="New site name" style="flex:1; padding:6px 8px; border:1px solid var(--line-strong); border-radius:6px; font-size:12px;">
+      </div>
+      <button class="export-btn" id="addSiteBtn" style="width:100%; margin-top:6px;">+ Add another site</button>
+
+      <label class="filter-row" style="margin-top:12px;"><input type="checkbox" id="setStatsForViewers"><span>Let viewers see the Stats card too</span></label>
+
+      <div class="field" style="margin-top:8px;">
+        <label>Hide activities older than (months, blank = never)</label>
+        <input id="setAutoArchive" type="number" min="0" placeholder="e.g. 6">
+      </div>
+
+      <div class="field">
+        <label>Firestore rule expiry reminder (date)</label>
+        <input id="setRuleExpiry" type="date">
+        <div id="ruleExpiryWarning" style="font-size:11px; color:#B5443B; margin-top:4px;"></div>
+      </div>
+
+      <button class="export-btn" id="saveSiteWideBtn" style="width:100%; margin-top:6px;">Save site-wide settings</button>
     </div>
-    <button class="export-btn" id="addSiteBtn" style="width:100%; margin-top:6px;">+ Add another site</button>
-
-    <label class="filter-row" style="margin-top:12px;"><input type="checkbox" id="setStatsForViewers"><span>Let viewers see the Stats card too</span></label>
-
-    <div class="field" style="margin-top:8px;">
-      <label>Hide activities older than (months, blank = never)</label>
-      <input id="setAutoArchive" type="number" min="0" placeholder="e.g. 6">
-    </div>
-
-    <div class="field">
-      <label>Firestore rule expiry reminder (date)</label>
-      <input id="setRuleExpiry" type="date">
-      <div id="ruleExpiryWarning" style="font-size:11px; color:#B5443B; margin-top:4px;"></div>
-    </div>
-
-    <button class="export-btn" id="saveSiteWideBtn" style="width:100%; margin-top:6px;">Save site-wide settings</button>
 
     <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:700; margin:18px 0 8px;">About</div>
     <div style="font-size:12px; color:var(--ink-soft);">Built by Andrew Kim</div>
@@ -901,13 +904,13 @@
   <div class="modal">
     <h3>How this works</h3>
     <div style="font-size:13px; line-height:1.7;">
-      <p style="margin-top:0;">This calendar shows what's happening, where, and when, no spreadsheets to dig through.</p>
-      <p><strong>See what's on a day:</strong> click any date on the calendar. What's happening that day shows up on the right.</p>
+      <p style="margin-top:0;">This calendar is a prototype. The hope is that all activity-related information can live here, on one interactive calendar, instead of going through spreadsheets.</p>
+      <p><strong>See what's on for any day:</strong> click the bar in the day you are looking for to see what is on.</p>
       <p style="margin-bottom:6px;"><strong>Colours mean sites:</strong></p>
       <div id="helpLegend" style="margin-bottom:12px;"></div>
-      <p><strong>Looking for something specific:</strong> type into the search box above the calendar.</p>
-      <p><strong>Only want certain sites:</strong> tick or untick them under "Filter by site."</p>
-      <p style="margin-bottom:0;"><strong>Want more detail:</strong> click on any activity to see everything about it, including time and location.</p>
+      <p><strong>Looking for something specific?</strong> Type into the search box above the calendar.</p>
+      <p><strong>Only want to see certain sites?</strong> Tick or untick them under "Filter by site."</p>
+      <p style="margin-bottom:0;"><strong>Want more detail?</strong> Click on any activity to see everything about it, including time and location.</p>
     </div>
     <div class="modal-actions">
       <button class="btn-save" id="helpCloseBtn" style="flex:1;">Got it</button>
@@ -2325,15 +2328,19 @@
     document.getElementById('setTextSize').value = prefs.textSize;
     document.getElementById('setWeekStart').value = prefs.weekStart;
     document.getElementById('setTimeFormat').value = prefs.timeFormat;
-    document.getElementById('setRememberSort').checked = prefs.rememberSort;
-    document.getElementById('setConfirmUnsaved').checked = prefs.confirmUnsaved;
-    populateSiteSelect(document.getElementById('setPrefillSite'), prefs.prefillSite);
-    populateSiteSelect(document.getElementById('setDefaultFilter'), (prefs.defaultFilter && prefs.defaultFilter[0]) || '');
-    buildManageSitesBody();
-    document.getElementById('setStatsForViewers').checked = !!siteSettings.statsForViewers;
-    document.getElementById('setAutoArchive').value = siteSettings.autoArchiveMonths || '';
-    document.getElementById('setRuleExpiry').value = siteSettings.ruleExpiry || '';
-    checkRuleExpiryWarning();
+
+    document.getElementById('editorOnlySettings').style.display = isEditor ? 'block' : 'none';
+    if(isEditor){
+      document.getElementById('setRememberSort').checked = prefs.rememberSort;
+      document.getElementById('setConfirmUnsaved').checked = prefs.confirmUnsaved;
+      populateSiteSelect(document.getElementById('setPrefillSite'), prefs.prefillSite);
+      populateSiteSelect(document.getElementById('setDefaultFilter'), (prefs.defaultFilter && prefs.defaultFilter[0]) || '');
+      buildManageSitesBody();
+      document.getElementById('setStatsForViewers').checked = !!siteSettings.statsForViewers;
+      document.getElementById('setAutoArchive').value = siteSettings.autoArchiveMonths || '';
+      document.getElementById('setRuleExpiry').value = siteSettings.ruleExpiry || '';
+      checkRuleExpiryWarning();
+    }
     settingsOverlay.classList.add('show');
   }
 
@@ -2487,7 +2494,6 @@
       }
       document.getElementById('editorStatusWidget').style.display = isEditor ? 'flex' : 'none';
       document.getElementById('appRoot').classList.toggle('viewer-mode', !isEditor);
-      document.getElementById('settingsToggleBtn').style.display = isEditor ? 'inline-block' : 'none';
       updateStatsVisibility();
       updateSyncStatus(currentSyncState);
       render();
