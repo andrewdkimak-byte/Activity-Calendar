@@ -174,7 +174,7 @@
     transition:border-color .12s, background .12s;
   }
   .day:hover{border-color:var(--line-strong); background:#F1F0EA;}
-  .day.selected{border-color:var(--ink); background:#FFFFFF; box-shadow:0 0 0 1px var(--ink) inset;}
+  .day.selected{border-color:var(--ink); background:var(--panel); box-shadow:0 0 0 1px var(--ink) inset;}
   .day.outside{opacity:0.35;}
   .day.weekend{background:#EFEDE3;}
   .day.weekend .daynum{color:var(--ink-soft);}
@@ -217,6 +217,7 @@
     display:flex;
     flex-direction:column;
     gap:16px;
+    align-self:start;
   }
   .card{
     background:var(--panel);
@@ -310,7 +311,7 @@
   }
   .overlay.show{display:flex;}
   .modal{
-    background:#fff;
+    background:var(--panel);
     border-radius:12px;
     width:100%;
     max-width:380px;
@@ -350,7 +351,7 @@
     display:flex; align-items:center; gap:6px;
     background:var(--paper);
   }
-  .site-chip.active{border-color:var(--ink); background:#fff; font-weight:700;}
+  .site-chip.active{border-color:var(--ink); background:var(--panel); font-weight:700;}
   .modal-actions{
     display:flex; gap:8px; margin-top:16px;
   }
@@ -362,7 +363,7 @@
     font-weight:700;
     cursor:pointer;
   }
-  .btn-cancel{border:1px solid var(--line-strong); background:#fff; color:var(--ink);}
+  .btn-cancel{border:1px solid var(--line-strong); background:var(--panel); color:var(--ink);}
   .btn-save{border:1px solid var(--ink); background:var(--ink); color:#fff;}
   .status-msg{
     font-size:11px;
@@ -400,7 +401,7 @@
     position:absolute;
     top:calc(100% + 4px);
     left:0; right:0;
-    background:#fff;
+    background:var(--panel);
     border:1px solid var(--line-strong);
     border-radius:8px;
     box-shadow:0 8px 24px rgba(0,0,0,0.12);
@@ -522,7 +523,7 @@
     position:absolute;
     bottom:calc(100% + 4px);
     left:0;
-    background:#fff;
+    background:var(--panel);
     border:1px solid var(--line-strong);
     border-radius:6px;
     padding:6px 8px;
@@ -552,7 +553,7 @@
   .activity-item .a-dup:hover{color:var(--ink);}
   .ctx-item{
     display:block; width:100%; text-align:left;
-    padding:9px 14px; border:none; background:#fff;
+    padding:9px 14px; border:none; background:var(--panel);
     cursor:pointer; font-size:inherit; color:var(--ink);
     border-bottom:1px solid var(--line);
   }
@@ -806,7 +807,7 @@
   </div>
 </div>
 
-<div id="contextMenu" style="display:none; position:fixed; background:#fff; border:1px solid var(--line-strong); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.16); z-index:100; overflow:hidden; min-width:130px; font-size:12.5px;">
+<div id="contextMenu" style="display:none; position:fixed; background:var(--panel); border:1px solid var(--line-strong); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.16); z-index:100; overflow:hidden; min-width:130px; font-size:12.5px;">
   <button class="ctx-item" data-action="edit">Edit</button>
   <button class="ctx-item" data-action="duplicate">Duplicate</button>
   <button class="ctx-item" data-action="delete" style="color:#B5443B;">Delete</button>
@@ -865,6 +866,11 @@
     <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:700; margin:18px 0 8px;">Site-wide (affects everyone)</div>
     <div id="manageSitesBody"></div>
     <button class="export-btn" id="saveManageSitesBtn" style="width:100%; margin-top:6px;">Save site names &amp; colours</button>
+    <div style="display:flex; gap:8px; align-items:center; margin-top:14px; padding-top:12px; border-top:1px solid var(--line);">
+      <input type="color" id="newSiteColor" value="#666666" style="width:32px; height:28px; border:1px solid var(--line-strong); border-radius:4px; padding:0; cursor:pointer;">
+      <input type="text" id="newSiteName" placeholder="New site name" style="flex:1; padding:6px 8px; border:1px solid var(--line-strong); border-radius:6px; font-size:12px;">
+    </div>
+    <button class="export-btn" id="addSiteBtn" style="width:100%; margin-top:6px;">+ Add another site</button>
 
     <label class="filter-row" style="margin-top:12px;"><input type="checkbox" id="setStatsForViewers"><span>Let viewers see the Stats card too</span></label>
 
@@ -882,7 +888,8 @@
     <button class="export-btn" id="saveSiteWideBtn" style="width:100%; margin-top:6px;">Save site-wide settings</button>
 
     <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:700; margin:18px 0 8px;">About</div>
-    <div style="font-size:12px; color:var(--ink-soft);">Activity Calendar — build 14 Sept 2026</div>
+    <div style="font-size:12px; color:var(--ink-soft);">Built by Andrew Kim</div>
+    <div style="font-size:12px; color:var(--ink-soft);">Version: 1.1</div>
 
     <div class="modal-actions" style="margin-top:16px;">
       <button class="btn-cancel" id="settingsCloseBtn" style="flex:1;">Close</button>
@@ -969,7 +976,8 @@
   function savePrefs(){ localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); }
 
   function swatchHtml(site){
-    return `<span class="swatch" style="background:${site.hex}"></span>${prefs.colorblind ? `<span class="site-letter">${SITE_LETTERS[site.id]}</span>` : ''}`;
+    const letter = SITE_LETTERS[site.id] || (site.name ? site.name.charAt(0).toUpperCase() : '?');
+    return `<span class="swatch" style="background:${site.hex}"></span>${prefs.colorblind ? `<span class="site-letter">${letter}</span>` : ''}`;
   }
 
   function applyPrefsToDom(){
@@ -1018,6 +1026,21 @@
   }
   function todayStr(){ return fmtDate(new Date()); }
   function siteById(id){ return SITES.find(s=>s.id===id); }
+
+  function slugifySiteName(name){
+    let base = name.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+    if(!base) base = 'site';
+    let id = base, n = 1;
+    while(SITES.some(s=>s.id===id)){
+      id = base + '-' + (++n);
+    }
+    return id;
+  }
+
+  function updateHeaderSubtitle(){
+    const el = document.querySelector('.brand .sub');
+    if(el) el.textContent = SITES.map(s=>s.name).join(' · ');
+  }
 
   // Converts legacy single-site/single-date records into the new shape,
   // and fills in defaults for any missing fields on newer records.
@@ -1190,7 +1213,13 @@
       const data = snap.exists ? snap.data() : {};
       activities = (data.activities || []).map(normalizeActivity);
       if(data.settings){
-        siteSettings = Object.assign({ statsForViewers:false, autoArchiveMonths:null, ruleExpiry:'', siteMeta:{} }, data.settings);
+        siteSettings = Object.assign({ statsForViewers:false, autoArchiveMonths:null, ruleExpiry:'', siteMeta:{}, customSites:[] }, data.settings);
+        (siteSettings.customSites || []).forEach(cs=>{
+          if(!SITES.some(s=>s.id===cs.id)){
+            SITES.push({id:cs.id, name:cs.name, color:cs.hex, hex:cs.hex});
+            activeFilters.add(cs.id);
+          }
+        });
         Object.keys(siteSettings.siteMeta || {}).forEach(id=>{
           const site = siteById(id);
           const meta = siteSettings.siteMeta[id];
@@ -1199,6 +1228,8 @@
             if(meta.hex) site.hex = meta.hex;
           }
         });
+        updateHeaderSubtitle();
+        buildFilters();
       }
       updateStatsVisibility();
       render();
@@ -1628,7 +1659,8 @@
     const { start, end } = getPeriodRange(periodEl.value, viewDate);
     const inRange = activities.filter(a => a.startDate <= end && a.endDate >= start);
 
-    const orderedSiteIds = ['brookvale','chatswood','hornsby','ryde'];
+    const baseOrder = ['brookvale','chatswood','hornsby','ryde'];
+    const orderedSiteIds = baseOrder.concat(SITES.map(s=>s.id).filter(id=>!baseOrder.includes(id)));
     let html = `<div style="font-weight:700; margin-bottom:8px;">${inRange.length} activities</div>`;
     orderedSiteIds.forEach(id=>{
       const site = siteById(id);
@@ -2232,6 +2264,7 @@
   applyUrlFilters();
   applyPrefsToDom();
   document.getElementById('sortSelect').value = sortMode;
+  updateHeaderSubtitle();
   buildFilters();
 
   const helpOverlay = document.getElementById('helpOverlay');
@@ -2380,8 +2413,35 @@
     if(!CONFIG_IS_PLACEHOLDER){
       await docRef.set({ settings: { siteMeta } }, { merge:true });
     }
+    updateHeaderSubtitle();
     render();
     alert('Site names and colours updated for everyone.');
+  });
+
+  document.getElementById('addSiteBtn').addEventListener('click', async ()=>{
+    const nameInput = document.getElementById('newSiteName');
+    const colorInput = document.getElementById('newSiteColor');
+    const name = nameInput.value.trim();
+    if(!name){ alert('Enter a name for the new site first.'); return; }
+    const id = slugifySiteName(name);
+    const hex = colorInput.value || '#666666';
+
+    SITES.push({id, name, color:hex, hex});
+    activeFilters.add(id);
+    siteSettings.customSites = siteSettings.customSites || [];
+    siteSettings.customSites.push({id, name, hex});
+
+    if(!CONFIG_IS_PLACEHOLDER){
+      await docRef.set({ settings: { customSites: siteSettings.customSites } }, { merge:true });
+    }
+
+    nameInput.value = '';
+    colorInput.value = '#666666';
+    updateHeaderSubtitle();
+    buildFilters();
+    buildManageSitesBody();
+    render();
+    alert(`${name} added as a new site.`);
   });
 
   document.getElementById('saveSiteWideBtn').addEventListener('click', async ()=>{
