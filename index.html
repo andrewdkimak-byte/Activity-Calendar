@@ -621,7 +621,7 @@
     <div class="grid" id="grid"></div>
   </div>
 
-  <div class="sidebar">
+  <div class="sidebar" id="sidebarPrimary">
     <div class="card">
       <h2>Export</h2>
       <div class="export-buttons">
@@ -669,14 +669,16 @@
     </div>
   </div>
 
-  <div class="sidebar sidebar-secondary">
-    <div class="card">
-      <button class="export-btn" id="jumpNextBtn" style="width:100%;">Jump to Next Activity →</button>
-    </div>
+  <div class="sidebar sidebar-secondary" id="sidebarSecondary">
+    <div id="secondaryContent">
+      <div class="card">
+        <button class="export-btn" id="jumpNextBtn" style="width:100%;">Jump to Next Activity →</button>
+      </div>
 
-    <div class="card">
-      <h2>Next 14 Days</h2>
-      <div id="twoWeekList" style="max-height:280px; overflow-y:auto;"></div>
+      <div class="card">
+        <h2>Next 14 Days</h2>
+        <div id="twoWeekList" style="max-height:280px; overflow-y:auto;"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -1043,6 +1045,20 @@
   function updateHeaderSubtitle(){
     const el = document.querySelector('.brand .sub');
     if(el) el.textContent = SITES.map(s=>s.name).join(' · ');
+  }
+
+  function updateSidebarLayout(){
+    const primary = document.getElementById('sidebarPrimary');
+    const secondaryWrap = document.getElementById('sidebarSecondary');
+    const content = document.getElementById('secondaryContent');
+    if(!primary || !secondaryWrap || !content) return;
+    if(isEditor){
+      if(content.parentElement !== secondaryWrap) secondaryWrap.appendChild(content);
+      secondaryWrap.style.display = '';
+    }else{
+      if(content.parentElement !== primary) primary.appendChild(content);
+      secondaryWrap.style.display = 'none';
+    }
   }
 
   // Converts legacy single-site/single-date records into the new shape,
@@ -2268,6 +2284,7 @@
   applyPrefsToDom();
   document.getElementById('sortSelect').value = sortMode;
   updateHeaderSubtitle();
+  updateSidebarLayout();
   buildFilters();
 
   const helpOverlay = document.getElementById('helpOverlay');
@@ -2494,6 +2511,7 @@
       }
       document.getElementById('editorStatusWidget').style.display = isEditor ? 'flex' : 'none';
       document.getElementById('appRoot').classList.toggle('viewer-mode', !isEditor);
+      updateSidebarLayout();
       updateStatsVisibility();
       updateSyncStatus(currentSyncState);
       render();
