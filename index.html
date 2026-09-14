@@ -241,7 +241,7 @@
     background:var(--paper);
     position:relative;
   }
-  .activity-item .a-title{font-weight:700; margin-bottom:2px; padding-right:60px;}
+  .activity-item .a-title{font-weight:700; margin-bottom:2px;}
   .activity-item .a-meta{color:var(--ink-soft); font-size:11px;}
   .activity-item .a-notes{margin-top:4px; color:var(--ink); font-size:11.5px;}
   .activity-item .a-del{
@@ -509,20 +509,6 @@
   }
   .site-tooltip .st-site{font-weight:700; margin-bottom:2px; display:block;}
   .site-row.filled:hover .site-tooltip{display:block;}
-
-  #detailOverlay{
-    background:transparent;
-    justify-content:flex-end;
-    align-items:flex-start;
-    padding:76px 24px 24px 0;
-    pointer-events:none;
-  }
-  #detailOverlay .modal{
-    pointer-events:auto;
-    max-width:320px;
-    border:1px solid var(--line-strong);
-    box-shadow:0 12px 36px rgba(0,0,0,0.2);
-  }
 
   .activity-item .a-edit{
     position:absolute; top:6px; right:26px;
@@ -1113,6 +1099,13 @@
               render();
               showActivityDetail(siteActs[0]);
             });
+            if(isEditor){
+              row.draggable = true;
+              row.addEventListener('dragstart', (e)=>{
+                e.stopPropagation();
+                e.dataTransfer.setData('text/plain', siteActs[0].id);
+              });
+            }
           }
         }
         rows.appendChild(row);
@@ -1200,20 +1193,11 @@
       item.style.borderLeftColor = primary ? primary.hex : '#999';
       item.style.cursor = 'pointer';
       item.dataset.id = a.id;
-      if(isEditor){
-        item.draggable = true;
-        item.addEventListener('dragstart', (e)=>{
-          e.dataTransfer.setData('text/plain', a.id);
-        });
-      }
       const siteNames = visibleSites.map(s=>s.name).join(', ');
       const dayLabel = formatDateRangeLabel(a.startDate, a.endDate);
       const timeLabel = formatTimeRangeLabel(a.time, a.endTime);
       const capLine = locationCapacityLine(a);
       item.innerHTML = `
-        ${isEditor ? `<button class="a-del" title="Delete" data-id="${a.id}">&times;</button>
-        <button class="a-edit" title="Edit" data-id="${a.id}">&#9998;</button>
-        <button class="a-dup" title="Duplicate" data-id="${a.id}">&#128203;</button>` : ''}
         <div class="a-title">${escapeHtml(a.title)}${a.activityId ? `<span class="a-id">ID ${escapeHtml(a.activityId)}</span>` : ''}</div>
         ${a.status && a.status !== 'confirmed' ? `<div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:${a.status==='cancelled' ? '#B5443B' : '#C9772E'}; margin-bottom:2px;">${a.status === 'cancelled' ? 'Cancelled' : 'Tentative'}</div>` : ''}
         ${a.ppType ? `<div style="font-style:italic; font-size:11px; color:var(--ink-soft); margin-bottom:2px;">${escapeHtml(shortPpTypeLabel(a.ppType))}</div>` : ''}
@@ -1227,18 +1211,6 @@
           e.preventDefault();
           e.stopPropagation();
           showContextMenu(e.clientX, e.clientY, a);
-        });
-        item.querySelector('.a-del').addEventListener('click', (e)=>{
-          e.stopPropagation();
-          deleteActivity(a.id);
-        });
-        item.querySelector('.a-edit').addEventListener('click', (e)=>{
-          e.stopPropagation();
-          openModal(a);
-        });
-        item.querySelector('.a-dup').addEventListener('click', (e)=>{
-          e.stopPropagation();
-          duplicateActivity(a);
         });
       }
       list.appendChild(item);
