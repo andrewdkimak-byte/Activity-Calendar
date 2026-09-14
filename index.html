@@ -1524,13 +1524,16 @@
       'End Date': a.endDate,
       Sites: a.sites.filter(s=>activeFilters.has(s)).map(s=> siteById(s)? siteById(s).name : s).join(', '),
       Title: a.title,
+      'Activity Type': mediumPpTypeLabel(a.ppType) || '',
       'Activity ID': a.activityId || '',
-      Time: a.time || '',
+      Time: formatTimeRangeLabel(a.time, a.endTime),
+      Location: a.location || '',
+      Capacity: a.capacityTotal ? `${a.capacityFilled||0}/${a.capacityTotal}` : (a.capacityFilled || ''),
       Notes: a.notes || ''
     }));
-    if(rows.length===0){ rows.push({'Start Date':'','End Date':'',Sites:'',Title:'No activities match current filters','Activity ID':'',Time:'',Notes:''}); }
+    if(rows.length===0){ rows.push({'Start Date':'','End Date':'',Sites:'',Title:'No activities match current filters','Activity Type':'','Activity ID':'',Time:'',Location:'',Capacity:'',Notes:''}); }
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{wch:11},{wch:11},{wch:20},{wch:32},{wch:11},{wch:8},{wch:40}];
+    ws['!cols'] = [{wch:11},{wch:11},{wch:20},{wch:32},{wch:28},{wch:11},{wch:16},{wch:20},{wch:10},{wch:40}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Activities');
     XLSX.writeFile(wb, 'activity-calendar.xlsx');
@@ -1540,13 +1543,14 @@
     const rows = exportableActivities();
     const activeSiteNames = SITES.filter(s=>activeFilters.has(s.id)).map(s=>s.name).join(', ');
     let html = `<h1>Activity Calendar</h1><div class="print-sub">Sites: ${escapeHtml(activeSiteNames || 'None')} · Generated ${new Date().toLocaleDateString('en-AU')}</div>`;
-    html += '<table><thead><tr><th>Start</th><th>End</th><th>Sites</th><th>Title</th><th>Activity ID</th><th>Time</th><th>Notes</th></tr></thead><tbody>';
+    html += '<table><thead><tr><th>Start</th><th>End</th><th>Sites</th><th>Title</th><th>Type</th><th>Activity ID</th><th>Time</th><th>Location</th><th>Capacity</th><th>Notes</th></tr></thead><tbody>';
     if(rows.length===0){
-      html += '<tr><td colspan="7">No activities match current filters.</td></tr>';
+      html += '<tr><td colspan="10">No activities match current filters.</td></tr>';
     }else{
       rows.forEach(a=>{
         const siteNames = a.sites.filter(s=>activeFilters.has(s)).map(s=> siteById(s)? siteById(s).name : s).join(', ');
-        html += `<tr><td>${escapeHtml(a.startDate)}</td><td>${escapeHtml(a.endDate)}</td><td>${escapeHtml(siteNames)}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.activityId||'')}</td><td>${escapeHtml(a.time||'')}</td><td>${escapeHtml(a.notes||'')}</td></tr>`;
+        const capText = a.capacityTotal ? `${a.capacityFilled||0}/${a.capacityTotal}` : (a.capacityFilled || '');
+        html += `<tr><td>${escapeHtml(a.startDate)}</td><td>${escapeHtml(a.endDate)}</td><td>${escapeHtml(siteNames)}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(mediumPpTypeLabel(a.ppType))}</td><td>${escapeHtml(a.activityId||'')}</td><td>${escapeHtml(formatTimeRangeLabel(a.time,a.endTime))}</td><td>${escapeHtml(a.location||'')}</td><td>${escapeHtml(capText)}</td><td>${escapeHtml(a.notes||'')}</td></tr>`;
       });
     }
     html += '</tbody></table>';
@@ -1599,7 +1603,11 @@
     rows.forEach(a=>{
       const siteNames = a.sites.filter(s=>activeFilters.has(s)).map(s=> siteById(s)? siteById(s).name : s).join(', ');
       let desc = siteNames;
+      if(a.ppType) desc += ' | ' + mediumPpTypeLabel(a.ppType);
       if(a.activityId) desc += ' | ID ' + a.activityId;
+      if(a.capacityTotal || a.capacityFilled){
+        desc += a.capacityTotal ? ` | ${a.capacityFilled||0}/${a.capacityTotal} spots` : ` | ${a.capacityFilled} filled`;
+      }
       if(a.notes) desc += ' | ' + a.notes;
 
       ics += 'BEGIN:VEVENT\r\n';
@@ -1615,7 +1623,7 @@
       }
       ics += 'SUMMARY:' + icsEscape(a.title) + '\r\n';
       ics += 'DESCRIPTION:' + icsEscape(desc) + '\r\n';
-      ics += 'LOCATION:' + icsEscape(siteNames) + '\r\n';
+      ics += 'LOCATION:' + icsEscape(a.location || siteNames) + '\r\n';
       ics += 'END:VEVENT\r\n';
     });
     ics += 'END:VCALENDAR\r\n';
