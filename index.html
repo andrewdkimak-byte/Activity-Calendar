@@ -150,6 +150,8 @@
   .day:hover{border-color:var(--line-strong); background:#F1F0EA;}
   .day.selected{border-color:var(--ink); background:#FFFFFF; box-shadow:0 0 0 1px var(--ink) inset;}
   .day.outside{opacity:0.35;}
+  .day.weekend{background:#EFEDE3;}
+  .day.weekend .daynum{color:var(--ink-soft);}
   .day.today .daynum{
     display:inline-flex;
     align-items:center;
@@ -239,7 +241,7 @@
     background:var(--paper);
     position:relative;
   }
-  .activity-item .a-title{font-weight:700; margin-bottom:2px; padding-right:18px;}
+  .activity-item .a-title{font-weight:700; margin-bottom:2px; padding-right:60px;}
   .activity-item .a-meta{color:var(--ink-soft); font-size:11px;}
   .activity-item .a-notes{margin-top:4px; color:var(--ink); font-size:11.5px;}
   .activity-item .a-del{
@@ -515,6 +517,13 @@
     padding:2px;
   }
   .activity-item .a-edit:hover{color:var(--ink);}
+  .activity-item .a-dup{
+    position:absolute; top:6px; right:44px;
+    border:none; background:none; cursor:pointer;
+    color:var(--ink-soft); font-size:12px; line-height:1;
+    padding:2px;
+  }
+  .activity-item .a-dup:hover{color:var(--ink);}
   .activity-item .a-id{
     display:inline-block;
     font-size:10px;
@@ -548,7 +557,13 @@
         </div>
       </div>
     </div>
+    <div id="editorStatusWidget" style="display:none; align-items:center; gap:6px; font-size:11px; color:var(--ink-soft); align-self:flex-start;">
+      <span id="statusDot" style="width:9px; height:9px; border-radius:50%; background:#999; display:inline-block;"></span>
+      <span id="statusText">Connecting…</span>
+    </div>
   </div>
+
+  <div id="loadingBanner" style="display:none; grid-column:1 / -1; font-size:12px; color:var(--ink-soft); padding:8px 0;">Loading activities…</div>
 
   <div class="cal-panel">
     <div class="cal-nav">
@@ -601,6 +616,10 @@
       </div>
       <div id="activityList"></div>
       <button class="add-btn" id="openAddBtn">+ Add activity</button>
+    </div>
+
+    <div class="card">
+      <button class="export-btn" id="jumpNextBtn" style="width:100%;">Jump to Next Activity →</button>
     </div>
 
     <div class="card">
@@ -901,21 +920,47 @@
     }
   }
 
+  let currentSyncState = 'connecting';
+
+  function updateSyncStatus(state){
+    currentSyncState = state;
+    const dot = document.getElementById('statusDot');
+    const text = document.getElementById('statusText');
+    const banner = document.getElementById('loadingBanner');
+    if(!dot) return;
+    if(state === 'connecting'){
+      dot.style.background = '#E3A857';
+      text.textContent = 'Connecting…';
+      if(banner) banner.style.display = isEditor ? 'block' : 'none';
+    }else if(state === 'connected'){
+      dot.style.background = '#3F8F5F';
+      text.textContent = 'Synced';
+      if(banner) banner.style.display = 'none';
+    }else{
+      dot.style.background = '#B5443B';
+      text.textContent = 'Connection error';
+      if(banner) banner.style.display = 'none';
+    }
+  }
+
   function startRealtimeSync(){
     if(CONFIG_IS_PLACEHOLDER){
       showConfigWarning();
       render();
       return;
     }
+    updateSyncStatus('connecting');
     docRef.onSnapshot((snap)=>{
       const data = snap.exists ? snap.data() : {};
       activities = (data.activities || []).map(normalizeActivity);
       render();
+      updateSyncStatus('connected');
       if(!data.seeded){
         seedIfNeeded();
       }
     }, (err)=>{
       console.error('Firestore sync error', err);
+      updateSyncStatus('error');
     });
   }
 
@@ -970,7 +1015,8 @@
       const dayActs = activities.filter(a => activityOnDay(a, dStr) && activityVisible(a));
 
       const cell = document.createElement('div');
-      cell.className = 'day' + (isOutside?' outside':'') + (isToday?' today':'') + (isSelected?' selected':'');
+      const isWeekend = (i % 7 === 5 || i % 7 === 6);
+      cell.className = 'day' + (isOutside?' outside':'') + (isToday?' today':'') + (isSelected?' selected':'') + (isWeekend?' weekend':'');
       cell.dataset.date = dStr;
 
       const top = document.createElement('div');
@@ -1072,7 +1118,8 @@
       const capLine = locationCapacityLine(a);
       item.innerHTML = `
         ${isEditor ? `<button class="a-del" title="Delete" data-id="${a.id}">&times;</button>
-        <button class="a-edit" title="Edit" data-id="${a.id}">&#9998;</button>` : ''}
+        <button class="a-edit" title="Edit" data-id="${a.id}">&#9998;</button>
+        <button class="a-dup" title="Duplicate" data-id="${a.id}">&#128203;</button>` : ''}
         <div class="a-title">${escapeHtml(a.title)}${a.activityId ? `<span class="a-id">ID ${escapeHtml(a.activityId)}</span>` : ''}</div>
         ${a.ppType ? `<div style="font-style:italic; font-size:11px; color:var(--ink-soft); margin-bottom:2px;">${escapeHtml(shortPpTypeLabel(a.ppType))}</div>` : ''}
         <div class="a-meta">${siteNames} · ${dayLabel}${timeLabel ? ' · '+timeLabel : ''}</div>
@@ -1088,6 +1135,10 @@
         item.querySelector('.a-edit').addEventListener('click', (e)=>{
           e.stopPropagation();
           openModal(a);
+        });
+        item.querySelector('.a-dup').addEventListener('click', (e)=>{
+          e.stopPropagation();
+          duplicateActivity(a);
         });
       }
       list.appendChild(item);
@@ -1346,6 +1397,24 @@
     overlay.classList.remove('show');
   }
 
+  function duplicateActivity(a){
+    openModal(null);
+    document.getElementById('modalTitle').textContent = 'Duplicate activity';
+    document.getElementById('fTitle').value = a.title;
+    document.getElementById('fDateStart').value = a.startDate;
+    document.getElementById('fDateEnd').value = a.endDate;
+    document.getElementById('fTimeStart').value = a.time || '';
+    document.getElementById('fTimeEnd').value = a.endTime || '';
+    document.getElementById('fLocation').value = a.location || '';
+    document.getElementById('fActivityId').value = a.activityId || '';
+    document.getElementById('fPpType').value = a.ppType || '';
+    document.getElementById('fCapacityFilled').value = a.capacityFilled || '';
+    document.getElementById('fCapacityTotal').value = a.capacityTotal || '';
+    document.getElementById('fNotes').value = a.notes || '';
+    modalSites = new Set(a.sites);
+    buildSiteOptions();
+  }
+
   document.getElementById('openAddBtn').addEventListener('click', ()=>openModal(null));
   document.getElementById('cancelBtn').addEventListener('click', closeModal);
   overlay.addEventListener('click', (e)=>{ if(e.target===overlay) closeModal(); });
@@ -1562,6 +1631,23 @@
     URL.revokeObjectURL(url);
   });
 
+  function jumpToNextActivity(){
+    let d = new Date(selectedDateStr + 'T00:00:00');
+    for(let i=0; i<400; i++){
+      d.setDate(d.getDate()+1);
+      const dStr = fmtDate(d);
+      const hasAny = activities.some(a=>activityOnDay(a, dStr) && activityVisible(a));
+      if(hasAny){
+        selectedDateStr = dStr;
+        viewDate = new Date(dStr + 'T00:00:00');
+        render();
+        return;
+      }
+    }
+    alert('No upcoming activities found in the next year.');
+  }
+  document.getElementById('jumpNextBtn').addEventListener('click', jumpToNextActivity);
+
   // Sort control
   document.getElementById('sortSelect').addEventListener('change', (e)=>{
     sortMode = e.target.value;
@@ -1713,6 +1799,8 @@
         signInForm.style.display = 'none';
         signedInWidget.style.display = 'none';
       }
+      document.getElementById('editorStatusWidget').style.display = isEditor ? 'flex' : 'none';
+      updateSyncStatus(currentSyncState);
       render();
     });
   }else{
