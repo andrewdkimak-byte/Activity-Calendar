@@ -837,6 +837,45 @@
     return formatTime12(start || end);
   }
 
+  // Short version of the PP classification for on-screen labels — everything
+  // before the em dash, with a trailing "Completion" stripped. The full
+  // official wording is preserved in storage and in the Copy Details text.
+  function shortPpTypeLabel(full){
+    if(!full) return '';
+    let short = full.split('—')[0].trim();
+    short = short.replace(/\s*Completion$/i, '').trim();
+    return short;
+  }
+
+  // Drops bracketed example lists (e.g. "(barista, software training, food
+  // safety etc)") but keeps the rest, including any Accredited/Non-Accredited
+  // qualifier — used for the Copy Details text.
+  function mediumPpTypeLabel(full){
+    if(!full) return '';
+    return full.replace(/\s*\([^)]*\)/g, '').trim();
+  }
+
+  function capacityPhrase(a){
+    const total = a.capacityTotal ? parseInt(a.capacityTotal, 10) : null;
+    const filled = a.capacityFilled ? parseInt(a.capacityFilled, 10) : 0;
+    if(total){
+      const remaining = total - filled;
+      if(remaining <= 0) return 'Full';
+      if(remaining === 1) return '1 remaining';
+      return `${remaining} remaining`;
+    }
+    if(a.capacityFilled) return `${a.capacityFilled} filled`;
+    return '';
+  }
+
+  function locationCapacityLine(a){
+    const cap = capacityPhrase(a);
+    if(a.location && cap) return `${a.location} (${cap})`;
+    if(a.location) return a.location;
+    if(cap) return `(${cap})`;
+    return '';
+  }
+
   function activityOnDay(a, dStr){
     return a.startDate <= dStr && dStr <= a.endDate;
   }
@@ -972,6 +1011,15 @@
           });
           tip.innerHTML = tipHtml;
           row.appendChild(tip);
+
+          if(siteActs.length === 1){
+            row.addEventListener('click', (e)=>{
+              e.stopPropagation();
+              selectedDateStr = dStr;
+              render();
+              showActivityDetail(siteActs[0]);
+            });
+          }
         }
         rows.appendChild(row);
       });
@@ -1021,14 +1069,14 @@
       const siteNames = visibleSites.map(s=>s.name).join(', ');
       const dayLabel = formatDateRangeLabel(a.startDate, a.endDate);
       const timeLabel = formatTimeRangeLabel(a.time, a.endTime);
-      const capacityLabel = a.capacityTotal ? `${a.capacityFilled || 0}/${a.capacityTotal} spots` : (a.capacityFilled ? `${a.capacityFilled} filled` : '');
+      const capLine = locationCapacityLine(a);
       item.innerHTML = `
         ${isEditor ? `<button class="a-del" title="Delete" data-id="${a.id}">&times;</button>
         <button class="a-edit" title="Edit" data-id="${a.id}">&#9998;</button>` : ''}
         <div class="a-title">${escapeHtml(a.title)}${a.activityId ? `<span class="a-id">ID ${escapeHtml(a.activityId)}</span>` : ''}</div>
-        ${a.ppType ? `<div style="font-style:italic; font-size:11px; color:var(--ink-soft); margin-bottom:2px;">${escapeHtml(a.ppType)}</div>` : ''}
-        <div class="a-meta">${siteNames} · ${dayLabel}${timeLabel ? ' · '+timeLabel : ''}${capacityLabel ? ' · '+capacityLabel : ''}</div>
-        ${a.location ? `<div class="a-notes">${escapeHtml(a.location)}</div>` : ''}
+        ${a.ppType ? `<div style="font-style:italic; font-size:11px; color:var(--ink-soft); margin-bottom:2px;">${escapeHtml(shortPpTypeLabel(a.ppType))}</div>` : ''}
+        <div class="a-meta">${siteNames} · ${dayLabel}${timeLabel ? ' · '+timeLabel : ''}</div>
+        ${capLine ? `<div class="a-notes">${escapeHtml(capLine)}</div>` : ''}
         ${a.notes ? `<div class="a-notes">${escapeHtml(a.notes)}</div>` : ''}
       `;
       item.addEventListener('click', ()=> showActivityDetail(a));
@@ -1120,7 +1168,7 @@
     const timeLabel = formatTimeRangeLabel(a.time, a.endTime);
 
     let text = `${a.title}\n${siteNames}\n${dayLabel}`;
-    if(a.ppType) text += `\n${a.ppType}`;
+    if(a.ppType) text += `\n${mediumPpTypeLabel(a.ppType)}`;
     if(timeLabel) text += `\n${timeLabel}`;
     if(a.location) text += `\n${a.location}`;
     if(a.activityId) text += `\nActivity ID: ${a.activityId}`;
