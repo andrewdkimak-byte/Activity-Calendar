@@ -2370,6 +2370,8 @@
   }
 
   let chatHistory = [];
+  let sharedChatLog = [];
+  let chatLogUnsub = null;
   let chatViewMode = 'chat';
 
   function handleChatSend(){
@@ -2381,6 +2383,14 @@
     const result = answerChat(q);
     chatAppend(result.text, 'bot');
     chatHistory.push({question:q, answerText:result.text, unresolved:result.unresolved, time:new Date()});
+    if(!CONFIG_IS_PLACEHOLDER){
+      docRef.collection('chatLog').add({
+        question: q,
+        answerText: result.text,
+        unresolved: result.unresolved,
+        time: firebase.firestore.FieldValue.serverTimestamp()
+      }).catch(()=>{ /* logging is best-effort, never blocks the chat itself */ });
+    }
   }
   document.getElementById('chatSendBtn').addEventListener('click', handleChatSend);
   document.getElementById('chatInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') handleChatSend(); });
@@ -2403,14 +2413,15 @@
     document.getElementById('chatHistoryControls').style.display = 'flex';
     const log = document.getElementById('chatLog');
     log.innerHTML = '';
-    let list = chatHistory;
+    const source = isEditor ? sharedChatLog : chatHistory;
+    let list = source;
     if(historyFilter === 'worked') list = list.filter(e=>!e.unresolved);
     if(historyFilter === 'failed') list = list.filter(e=>e.unresolved);
 
     if(list.length === 0){
       const empty = document.createElement('div');
       empty.style.cssText = 'font-size:11px; color:var(--ink-soft);';
-      empty.textContent = chatHistory.length === 0 ? 'No questions asked yet this session.' : 'Nothing matches this filter.';
+      empty.textContent = source.length === 0 ? 'No questions asked yet.' : 'Nothing matches this filter.';
       log.appendChild(empty);
       return;
     }
