@@ -50,6 +50,9 @@
   #appRoot.text-large{ zoom:1.18; }
   #appRoot.text-small{ zoom:0.92; }
   .site-letter{ font-size:9px; font-weight:800; margin-right:4px; }
+  .chat-msg{ padding:8px 10px; border-radius:8px; max-width:85%; line-height:1.45; white-space:pre-line; }
+  .chat-msg.user{ align-self:flex-end; background:var(--ink); color:#fff; }
+  .chat-msg.bot{ align-self:flex-start; background:var(--paper); border:1px solid var(--line); color:var(--ink); }
   .app{
     display:grid;
     grid-template-columns: 1fr 320px 320px;
@@ -930,6 +933,20 @@
       <button class="btn-save" id="detailCopyBtn">Copy details</button>
     </div>
     <div class="status-msg" id="detailCopyMsg"></div>
+  </div>
+</div>
+
+<button id="chatToggleBtn" title="Ask the calendar" style="position:fixed; bottom:20px; right:20px; width:52px; height:52px; border-radius:50%; background:var(--ink); color:#fff; border:none; font-size:20px; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,0.25); z-index:90;">💬</button>
+
+<div id="chatPanel" style="display:none; flex-direction:column; position:fixed; bottom:84px; right:20px; width:320px; max-height:440px; background:var(--panel); border:1px solid var(--line-strong); border-radius:12px; box-shadow:0 12px 34px rgba(0,0,0,0.2); z-index:90;">
+  <div style="padding:12px 14px; border-bottom:1px solid var(--line); font-weight:700; font-size:13px; display:flex; justify-content:space-between; align-items:center;">
+    <span>Ask the calendar</span>
+    <button id="chatCloseBtn" style="background:none; border:none; cursor:pointer; color:var(--ink-soft); font-size:16px;">&times;</button>
+  </div>
+  <div id="chatLog" style="flex:1; overflow-y:auto; padding:10px 14px; font-size:12.5px; display:flex; flex-direction:column; gap:10px; max-height:320px;"></div>
+  <div style="padding:10px; border-top:1px solid var(--line); display:flex; gap:6px;">
+    <input id="chatInput" type="text" placeholder="e.g. what's on Thursday?" style="flex:1; padding:8px 10px; border:1px solid var(--line-strong); border-radius:8px; font-size:12.5px;">
+    <button id="chatSendBtn" class="today-btn" style="text-transform:none;">Ask</button>
   </div>
 </div>
 
@@ -2125,6 +2142,184 @@
     alert('No upcoming activities found in the next year.');
   }
   document.getElementById('jumpNextBtn').addEventListener('click', jumpToNextActivity);
+
+  // ===== "Ask the calendar" rule-based chat engine =====
+  const WEEKDAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+
+  function parseDateReference(q){
+    const today = new Date(); today.setHours(0,0,0,0);
+    if(/\btoday\b/.test(q)) return fmtDate(today);
+    if(/\btomorrow\b/.test(q)){ const d=new Date(today); d.setDate(d.getDate()+1); return fmtDate(d); }
+    if(/\byesterday\b/.test(q)){ const d=new Date(today); d.setDate(d.getDate()-1); return fmtDate(d); }
+    for(let i=0;i<7;i++){
+      const name = WEEKDAY_NAMES[i];
+      if(new RegExp('\\b'+name+'\\b').test(q)){
+        const d = new Date(today);
+        let diff = (i - d.getDay() + 7) % 7;
+        if(diff === 0 && /\bnext\b/.test(q)) diff = 7;
+        d.setDate(d.getDate() + diff);
+        return fmtDate(d);
+      }
+    }
+    const m = q.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+    if(m){
+      const day = parseInt(m[1],10), month = parseInt(m[2],10)-1;
+      const d = new Date(today.getFullYear(), month, day);
+      return fmtDate(d);
+    }
+    return null;
+  }
+
+  function parseSiteReference(q){
+    return SITES.find(s => q.includes(s.name.toLowerCase()));
+  }
+
+  function parseStatusReference(q){
+    if(/\bcancelled\b|\bcancel(l?ed)?\b/.test(q)) return 'cancelled';
+    if(/\btentative\b/.test(q)) return 'tentative';
+    if(/\bconfirmed\b/.test(q)) return 'confirmed';
+    return null;
+  }
+
+  function parseTypeKeyword(q){
+    if(/\bnon[- ]?vocational\b/.test(q)) return 'non-vocational';
+    if(/\bvocational\b/.test(q)) return 'vocational';
+    if(/\beducation\b/.test(q)) return 'education';
+    if(/\bwork placement\b/.test(q)) return 'work placement';
+    if(/\bpathway\b/.test(q)) return 'pathway';
+    return null;
+  }
+
+  function findActivityByTitleFragment(q){
+    const m = q.match(/(?:for|of|about|is)\s+([a-z0-9 \-']+?)[\?\.]?$/);
+    if(!m) return null;
+    const frag = m[1].trim();
+    if(!frag || frag.length < 2) return null;
+    const matches = activities.filter(a => activityVisible(a) && a.title.toLowerCase().includes(frag));
+    return matches.length ? matches : null;
+  }
+
+  function answerChat(rawQ){
+    const q = rawQ.toLowerCase().trim();
+    if(!q) return "Ask me something like \"what's on Thursday\" or \"where is Digital Ready\".";
+
+    if(/\bactivity id\b|\bid for\b/.test(q)){
+      const matches = findActivityByTitleFragment(q);
+      if(matches) return matches.slice(0,5).map(a => `${a.title}: ${a.activityId ? 'ID '+a.activityId : 'no ID on file'} (${formatDateRangeLabel(a.startDate,a.endDate)})`).join('\n');
+      return "I couldn't find an activity matching that name. Try the search bar for a broader look.";
+    }
+
+    if(/\bwhere\b|\blocation\b/.test(q)){
+      const matches = findActivityByTitleFragment(q);
+      if(matches) return matches.slice(0,5).map(a => `${a.title}: ${a.location || 'no location on file'}`).join('\n');
+      return "I couldn't find an activity matching that name.";
+    }
+
+    if(/\bwhat time\b|\bwhen does\b|\bwhen is\b/.test(q)){
+      const matches = findActivityByTitleFragment(q);
+      if(matches) return matches.slice(0,5).map(a=>{
+        const t = formatTimeRangeLabel(a.time,a.endTime);
+        return `${a.title}: ${formatDateRangeLabel(a.startDate,a.endDate)}${t ? ', '+t : ', no time set'}`;
+      }).join('\n');
+      return "I couldn't find an activity matching that name.";
+    }
+
+    if(/\bhow many\b|\bcount\b/.test(q)){
+      const site = parseSiteReference(q);
+      const status = parseStatusReference(q);
+      const type = parseTypeKeyword(q);
+      const dateRef = parseDateReference(q);
+      let pool = activities.filter(browseVisible);
+      if(site) pool = pool.filter(a=>a.sites.includes(site.id));
+      if(status) pool = activities.filter(a=>activityVisible(a) && a.status===status);
+      if(type) pool = pool.filter(a=> a.ppType && a.ppType.toLowerCase().includes(type));
+      if(dateRef) pool = pool.filter(a=>activityOnDay(a,dateRef));
+      return `${pool.length} activit${pool.length===1?'y':'ies'} match that.`;
+    }
+
+    const status = parseStatusReference(q);
+    if(status){
+      const site = parseSiteReference(q);
+      const dateRef = parseDateReference(q);
+      let pool = activities.filter(a=>activityVisible(a) && a.status===status);
+      if(site) pool = pool.filter(a=>a.sites.includes(site.id));
+      if(dateRef) pool = pool.filter(a=>activityOnDay(a,dateRef));
+      if(!pool.length) return `Nothing currently ${status}${site?' at '+site.name:''}${dateRef?' on '+formatDayDate(dateRef):''}.`;
+      return pool.slice(0,8).map(a=>`${a.title} (${a.sites.map(id=>siteById(id)?siteById(id).name:id).join(', ')}, ${formatDateRangeLabel(a.startDate,a.endDate)})`).join('\n');
+    }
+
+    const type = parseTypeKeyword(q);
+    if(type){
+      const site = parseSiteReference(q);
+      const dateRef = parseDateReference(q);
+      let pool = activities.filter(a=>browseVisible(a) && a.ppType && a.ppType.toLowerCase().includes(type));
+      if(site) pool = pool.filter(a=>a.sites.includes(site.id));
+      if(dateRef) pool = pool.filter(a=>activityOnDay(a,dateRef));
+      if(!pool.length) return `No ${type} activities found matching that.`;
+      return pool.slice(0,8).map(a=>`${a.title} (${formatDateRangeLabel(a.startDate,a.endDate)})`).join('\n');
+    }
+
+    if(/\bnext\b/.test(q) && /\bactivit/.test(q)){
+      let d = new Date(); d.setHours(0,0,0,0);
+      for(let i=0;i<400;i++){
+        const dStr = fmtDate(d);
+        const acts = activities.filter(a=>activityOnDay(a,dStr) && browseVisible(a));
+        if(acts.length) return `Next up, ${formatDayDate(dStr)}: ` + acts.map(a=>a.title).join(', ');
+        d.setDate(d.getDate()+1);
+      }
+      return "Nothing scheduled in the next year.";
+    }
+
+    const dateRef = parseDateReference(q);
+    const site = parseSiteReference(q);
+    if(dateRef || site){
+      let pool = activities.filter(browseVisible);
+      if(dateRef) pool = pool.filter(a=>activityOnDay(a,dateRef));
+      if(site) pool = pool.filter(a=>a.sites.includes(site.id));
+      if(!dateRef){
+        const todayStr2 = fmtDate(new Date());
+        pool = pool.filter(a=>a.endDate >= todayStr2);
+        if(!pool.length) return `Nothing currently scheduled at ${site.name}.`;
+        return `Upcoming at ${site.name}: ` + pool.slice(0,8).map(a=>`${a.title} (${formatDateRangeLabel(a.startDate,a.endDate)})`).join(', ');
+      }
+      if(!pool.length) return `Nothing on${site?' at '+site.name:''} for ${formatDayDate(dateRef)}.`;
+      return `${formatDayDate(dateRef)}${site?' at '+site.name:''}: ` + pool.map(a=>a.title).join(', ');
+    }
+
+    return "I'm not sure how to answer that. Try asking about a date (\"what's on Thursday\"), a site (\"what's on at Ryde\"), or an activity by name (\"where is Digital Ready\").";
+  }
+
+  function chatAppend(text, who){
+    const log = document.getElementById('chatLog');
+    const div = document.createElement('div');
+    div.className = 'chat-msg ' + who;
+    div.textContent = text;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function handleChatSend(){
+    const input = document.getElementById('chatInput');
+    const q = input.value.trim();
+    if(!q) return;
+    chatAppend(q, 'user');
+    input.value = '';
+    chatAppend(answerChat(q), 'bot');
+  }
+  document.getElementById('chatSendBtn').addEventListener('click', handleChatSend);
+  document.getElementById('chatInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') handleChatSend(); });
+  document.getElementById('chatToggleBtn').addEventListener('click', ()=>{
+    const panel = document.getElementById('chatPanel');
+    const showing = panel.style.display === 'flex';
+    panel.style.display = showing ? 'none' : 'flex';
+    if(!showing && !document.getElementById('chatLog').dataset.greeted){
+      chatAppend("Hi! Ask me things like \"what's on Thursday\", \"what's on at Ryde\", \"where is Digital Ready\", or \"how many vocational activities this month\".", 'bot');
+      document.getElementById('chatLog').dataset.greeted = '1';
+    }
+  });
+  document.getElementById('chatCloseBtn').addEventListener('click', ()=>{
+    document.getElementById('chatPanel').style.display = 'none';
+  });
 
   // Sort control
   document.getElementById('sortSelect').addEventListener('change', (e)=>{
