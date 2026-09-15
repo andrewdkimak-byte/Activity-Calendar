@@ -951,6 +951,7 @@
     <button class="hist-filter-btn" data-filter="worked" style="border:none; background:none; cursor:pointer; padding:2px 4px; color:var(--ink-soft);">Worked</button>
     <button class="hist-filter-btn" data-filter="failed" style="border:none; background:none; cursor:pointer; padding:2px 4px; color:var(--ink-soft);">Didn't work</button>
     <button id="chatExtractBtn" style="margin-left:auto; border:1px solid var(--line-strong); background:var(--panel); border-radius:5px; cursor:pointer; padding:3px 8px; color:var(--ink);">Extract</button>
+    <button id="chatDeleteFailedBtn" style="border:1px solid var(--line-strong); background:var(--panel); border-radius:5px; cursor:pointer; padding:3px 8px; color:#B5443B;">Delete all</button>
   </div>
   <div id="chatLog" style="flex:1; overflow-y:auto; padding:10px 14px; font-size:12.5px; display:flex; flex-direction:column; gap:10px; max-height:320px;"></div>
   <div style="padding:10px; border-top:1px solid var(--line); display:flex; gap:6px;">
@@ -2235,11 +2236,18 @@
   }
 
   function findActivityByTitleFragment(q){
-    const m = q.match(/(?:for|of|about|is)\s+([a-z0-9 \-']+?)[\?\.]?$/);
+    const m = q.match(/.*\b(?:for|of|about|is)\s+([a-z0-9 \-']+?)[\?\.]?$/);
     if(!m) return null;
     const frag = m[1].trim();
     if(!frag || frag.length < 2) return null;
-    const matches = activities.filter(a => activityVisible(a) && a.title.toLowerCase().includes(frag));
+    const fragNoSpace = frag.replace(/\s+/g, '');
+    const matches = activities.filter(a => {
+      if(!activityVisible(a)) return false;
+      const titleLower = a.title.toLowerCase();
+      const titleNoSpace = titleLower.replace(/\s+/g, '');
+      const typeLower = (a.ppType || '').toLowerCase();
+      return titleLower.includes(frag) || titleNoSpace.includes(fragNoSpace) || typeLower.includes(frag);
+    });
     return matches.length ? matches : null;
   }
 
@@ -2334,6 +2342,19 @@
       }
       if(!pool.length) return {text: `Nothing on${site?' at '+site.name:''} for ${formatDayDate(dateRef)}.`, unresolved:false};
       return {text: `${formatDayDate(dateRef)}${site?' at '+site.name:''}: ` + pool.map(a=>a.title).join(', '), unresolved:false};
+    }
+
+    const genericMatches = findActivityByTitleFragment(q);
+    if(genericMatches){
+      return {text: genericMatches.slice(0,3).map(a=>{
+        const siteNames = a.sites.map(id=>siteById(id)?siteById(id).name:id).join(', ');
+        const t = formatTimeRangeLabel(a.time, a.endTime);
+        let block = `${a.title}\n${siteNames} · ${formatDateRangeLabel(a.startDate, a.endDate)}`;
+        if(t) block += ' · ' + t;
+        if(a.location) block += '\n' + a.location;
+        if(a.ppType) block += '\n' + shortPpTypeLabel(a.ppType);
+        return block;
+      }).join('\n\n'), unresolved:false};
     }
 
     return {text:"I'm not sure how to answer that. Try asking about a date (\"what's on Thursday\"), a site (\"what's on at Ryde\"), or an activity by name (\"where is Digital Ready\").", unresolved:true};
@@ -2431,9 +2452,23 @@
     const text = 'Questions the calendar chatbot could not answer this session:\n' + failed.map(e=>`- "${e.question}"`).join('\n');
     try{
       await navigator.clipboard.writeText(text);
-      alert(`Copied ${failed.length} unanswered question(s) to clipboard. Paste them back to Claude to improve pattern matching.`);
     }catch(e){
       prompt('Copy this text:', text);
+    }
+    const remove = confirm(`Copied ${failed.length} unanswered question(s) to clipboard.\n\nRemove these from the "Didn't work" list now that they're copied?`);
+    if(remove){
+      const failedSet = new Set(failed);
+      chatHistory = chatHistory.filter(e=>!failedSet.has(e));
+      renderChatHistoryView();
+    }
+  });
+
+  document.getElementById('chatDeleteFailedBtn').addEventListener('click', ()=>{
+    const failedCount = chatHistory.filter(e=>e.unresolved).length;
+    if(failedCount === 0){ alert('No unanswered questions to delete.'); return; }
+    if(confirm(`Delete all ${failedCount} unanswered question(s) from history? This can't be undone.`)){
+      chatHistory = chatHistory.filter(e=>!e.unresolved);
+      renderChatHistoryView();
     }
   });
 
