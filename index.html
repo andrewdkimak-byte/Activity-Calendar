@@ -2409,6 +2409,27 @@
 
   let historyFilter = 'all';
 
+  function startChatLogListener(){
+    if(chatLogUnsub || CONFIG_IS_PLACEHOLDER) return;
+    chatLogUnsub = docRef.collection('chatLog').limit(200).onSnapshot((snap)=>{
+      sharedChatLog = snap.docs.map(d=>{
+        const data = d.data();
+        return {
+          id: d.id,
+          question: data.question,
+          answerText: data.answerText,
+          unresolved: data.unresolved,
+          time: data.time ? data.time.toDate() : new Date()
+        };
+      }).sort((a,b)=> b.time - a.time);
+      if(chatViewMode === 'history') renderChatHistoryView();
+    }, (err)=>{ console.error('Chat log listener error', err); });
+  }
+  function stopChatLogListener(){
+    if(chatLogUnsub){ chatLogUnsub(); chatLogUnsub = null; }
+    sharedChatLog = [];
+  }
+
   function renderChatHistoryView(){
     document.getElementById('chatHistoryControls').style.display = 'flex';
     const log = document.getElementById('chatLog');
@@ -2458,9 +2479,10 @@
   });
 
   document.getElementById('chatExtractBtn').addEventListener('click', async ()=>{
-    const failed = chatHistory.filter(e=>e.unresolved);
+    const source = isEditor ? sharedChatLog : chatHistory;
+    const failed = source.filter(e=>e.unresolved);
     if(failed.length === 0){ alert('No unanswered questions to extract yet.'); return; }
-    const text = 'Questions the calendar chatbot could not answer this session:\n' + failed.map(e=>`- "${e.question}"`).join('\n');
+    const text = 'Questions the calendar chatbot could not answer:\n' + failed.map(e=>`- "${e.question}"`).join('\n');
     try{
       await navigator.clipboard.writeText(text);
     }catch(e){
@@ -2468,17 +2490,26 @@
     }
     const remove = confirm(`Copied ${failed.length} unanswered question(s) to clipboard.\n\nRemove these from the "Didn't work" list now that they're copied?`);
     if(remove){
-      const failedSet = new Set(failed);
-      chatHistory = chatHistory.filter(e=>!failedSet.has(e));
+      if(isEditor && !CONFIG_IS_PLACEHOLDER){
+        await Promise.all(failed.map(e => e.id ? docRef.collection('chatLog').doc(e.id).delete().catch(()=>{}) : Promise.resolve()));
+      }else{
+        const failedSet = new Set(failed);
+        chatHistory = chatHistory.filter(e=>!failedSet.has(e));
+      }
       renderChatHistoryView();
     }
   });
 
-  document.getElementById('chatDeleteFailedBtn').addEventListener('click', ()=>{
-    const failedCount = chatHistory.filter(e=>e.unresolved).length;
-    if(failedCount === 0){ alert('No unanswered questions to delete.'); return; }
-    if(confirm(`Delete all ${failedCount} unanswered question(s) from history? This can't be undone.`)){
-      chatHistory = chatHistory.filter(e=>!e.unresolved);
+  document.getElementById('chatDeleteFailedBtn').addEventListener('click', async ()=>{
+    const source = isEditor ? sharedChatLog : chatHistory;
+    const failed = source.filter(e=>e.unresolved);
+    if(failed.length === 0){ alert('No unanswered questions to delete.'); return; }
+    if(confirm(`Delete all ${failed.length} unanswered question(s) from history? This can't be undone.`)){
+      if(isEditor && !CONFIG_IS_PLACEHOLDER){
+        await Promise.all(failed.map(e => e.id ? docRef.collection('chatLog').doc(e.id).delete().catch(()=>{}) : Promise.resolve()));
+      }else{
+        chatHistory = chatHistory.filter(e=>!e.unresolved);
+      }
       renderChatHistoryView();
     }
   });
@@ -2886,6 +2917,7 @@
       }
       document.getElementById('editorStatusWidget').style.display = isEditor ? 'flex' : 'none';
       document.getElementById('chatHistoryBtn').style.display = isEditor ? 'inline-block' : 'none';
+      if(isEditor) startChatLogListener(); else stopChatLogListener();
       document.getElementById('appRoot').classList.toggle('viewer-mode', !isEditor);
       updateSidebarLayout();
       updateStatsVisibility();
